@@ -45,8 +45,7 @@ class ChatRoomProtocol(ServerProtocol):
             self.send_packet("spawn_position", self.buff_type.pack("iii", 0, 0, 0))
 
         # Send "Player Position and Look" packet
-        self.send_packet(
-            "player_position_and_look",
+        player_position_data = [
             self.buff_type.pack("dddff?",
                 0,                         # x
                 500,                       # y  Must be >= build height to pass the "Loading Terrain" screen on 1.18.2
@@ -54,8 +53,12 @@ class ChatRoomProtocol(ServerProtocol):
                 0,                         # yaw
                 0,                         # pitch
                 0b00000),                  # flags
-            self.buff_type.pack_varint(0),  # teleport id
-            self.buff_type.pack("?", True))  # Leave vehicle,
+            self.buff_type.pack_varint(0)  # teleport id
+        ]
+
+        # <1.19.4 needs flag for leaving vehicle
+        if self.protocol_version < 762:
+            player_position_data.append(self.buff_type.pack("?", True)) # Leave vehicle
 
         # Start sending "Keep Alive" packets
         self.ticker.add_loop(20, self.update_keep_alive)
@@ -316,7 +319,7 @@ class ChatRoomFactory(ServerFactory):
                                player.buff_type.pack_chat(sender_name),  # Sender display name
                                player.buff_type.pack('?', False))  # No team name
 
-        # 1.19 packet format is different
+        # 1.19
         else:
             player.send_packet("chat_message",
                                player.buff_type.pack_chat(message.body.message),  # Original message
