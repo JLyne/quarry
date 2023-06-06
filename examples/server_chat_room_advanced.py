@@ -288,8 +288,11 @@ class ChatRoomFactory(ServerFactory):
 
         join_game.append(player.buff_type.pack("????", is_reduced_debug, is_respawn_screen, is_debug, is_flat))
 
-        if player.protocol_version >= 759:  # 1.19
+        if player.protocol_version >= 759:  # 1.19 optional last death location
             join_game.append(player.buff_type.pack("?", False))
+
+        if player.protocol_version >= 763:  # 1.20 portal cooldown
+            join_game.append(player.buff_type.pack_varint(0))
 
         # Send "Join Game" packet
         player.send_packet("join_game", *join_game)

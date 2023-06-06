@@ -66,8 +66,11 @@ class ChatRoomProtocol(ServerProtocol):
 
         join_game.append(self.buff_type.pack("????", is_reduced_debug, is_respawn_screen, is_debug, is_flat))
 
-        if self.protocol_version >= 759:  # 1.19
+        if self.protocol_version >= 759:  # 1.19 optional last death location
             join_game.append(self.buff_type.pack("?", False))
+
+        if self.protocol_version >= 763:  # 1.20 portal cooldown
+            join_game.append(self.buff_type.pack_varint(0))
 
         # Send "Join Game" packet
         self.send_packet("join_game", *join_game)
