@@ -11,6 +11,7 @@ from quarry.types.buffer.v1_19 import Buffer1_19
 from quarry.types.buffer.v1_19_1 import Buffer1_19_1
 from quarry.types.buffer.v1_19_3 import Buffer1_19_3
 from quarry.types.buffer.v1_19_4 import Buffer1_19_4
+from quarry.types.buffer.v1_20_2 import Buffer1_20_2
 
 
 # Versioned buffers used after handshaking
@@ -23,7 +24,8 @@ buff_types = [
     (759, Buffer1_19),
     (760, Buffer1_19_1),
     (761, Buffer1_19_3),
-    (1073741949, Buffer1_19_4),
+    (762, Buffer1_19_4),
+    (764, Buffer1_20_2),
 ]
 
 

@@ -164,7 +164,9 @@ class TagCompound(_Tag):
     preserve_order = False
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, nameless=False):
+        first_tag = True
+
         if cls.preserve_order:
             value = collections.OrderedDict()
         else:
@@ -175,7 +177,13 @@ class TagCompound(_Tag):
             if kind_id == 0:
                 return cls(value)
             kind = _kinds[kind_id]
-            name = TagString.from_buff(buff).value
+
+            # TODO: Test
+            if first_tag and nameless:
+                name = ""
+            else:
+                name = TagString.from_buff(buff).value
+
             tag = kind.from_buff(buff)
             value[name] = tag
             if cls.root:
@@ -220,6 +228,13 @@ class TagRoot(TagCompound):
     @property
     def body(self):
         return self.value[""]
+
+    def to_bytes(self, nameless=False):
+        if nameless:
+            return Buffer.pack('b', _ids[type(self.value[""])]) + self.value[""].to_bytes()
+        else:
+            return super().to_bytes()
+
 
 
 # Register tags ---------------------------------------------------------------
