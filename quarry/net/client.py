@@ -14,50 +14,50 @@ class ClientProtocol(Protocol):
     send_direction = "upstream"
 
     # Convenience functions ---------------------------------------------------
+    def send_handshake(self, mode):
+        # Send handshake
+        addr = self.transport.connector.getDestination()
+        self.send_packet(
+            "handshake",
+            self.buff_type.pack_varint(self.protocol_version) +
+            self.buff_type.pack_string(addr.host) +
+            self.buff_type.pack('H', addr.port) +
+            self.buff_type.pack_varint(
+                protocol_modes_inv[mode]))
 
-    def switch_protocol_mode(self, mode):
-        self.check_protocol_mode_switch(mode)
+        # Switch buff type
+        self.buff_type = self.factory.get_buff_type(self.protocol_version)
+        self.switch_protocol_mode(mode)
 
-        if mode in ("status", "login"):
-            # Send handshake
-            addr = self.transport.connector.getDestination()
-            self.send_packet(
-                "handshake",
-                self.buff_type.pack_varint(self.protocol_version) +
-                self.buff_type.pack_string(addr.host) +
-                self.buff_type.pack('H', addr.port) +
-                self.buff_type.pack_varint(
-                    protocol_modes_inv[self.factory.protocol_mode_next]))
+    def send_status_request(self):
+        self.send_handshake("status")
+        self.send_packet("status_request")
 
-            # Switch buff type
-            self.buff_type = self.factory.get_buff_type(self.protocol_version)
+    def send_login_start(self):
+        self.send_handshake("login")
 
-        self.protocol_mode = mode
-
-        if mode == "status":
-            # Send status request
-            self.send_packet("status_request")
-
-        elif mode == "login":
+        # TODO: Implement signature sending
+        if self.protocol_version >= 764:  # 1.20.2+ always sends UUID
+            self.send_packet("login_start",
+                             self.buff_type.pack_string(self.factory.profile.display_name),
+                             self.buff_type.pack_uuid(self.factory.profile.uuid))
+        elif self.protocol_version >= 761:  # 1.19.3 sends optional UUID
+            self.send_packet("login_start",
+                             self.buff_type.pack_string(self.factory.profile.display_name),
+                             self.buff_type.pack_optional(self.buff_type.pack_uuid, self.factory.profile.uuid))
+        elif self.protocol_version >= 760:  # 1.19.1 sends optional signature and uuid
+            self.send_packet("login_start",
+                             self.buff_type.pack_string(self.factory.profile.display_name),
+                             self.buff_type.pack("?", False),  # No signature as we haven't implemented them here
+                             self.buff_type.pack_optional(self.buff_type.pack_uuid, self.factory.profile.uuid))
+        elif self.protocol_version == 759:  # 1.19 sends optional signature
+            self.send_packet("login_start",
+                             self.buff_type.pack_string(self.factory.profile.display_name),
+                             self.buff_type.pack("?", False))  # No signature as we haven't implemented them here
+        else:
             # Send login start
-            # TODO: Implement signature/UUID sending
-            if self.protocol_version >= 761:  # 1.19.3+ sends optional UUID
-                self.send_packet("login_start",
-                                 self.buff_type.pack_string(self.factory.profile.display_name),
-                                 self.buff_type.pack("?", False))  # No UUID as we haven't implemented them yet
-            elif self.protocol_version >= 760:  # 1.19.1 sends optional signature and uuid
-                self.send_packet("login_start",
-                                 self.buff_type.pack_string(self.factory.profile.display_name),
-                                 self.buff_type.pack("?", False),  # No signature as we haven't implemented them here
-                                 self.buff_type.pack("?", False))  # No UUID as we haven't implemented them yet
-            elif self.protocol_version == 759:  # 1.19 sends optional signature
-                self.send_packet("login_start",
-                                 self.buff_type.pack_string(self.factory.profile.display_name),
-                                 self.buff_type.pack("?", False))  # No signature as we haven't implemented them here
-            else:
-                # Send login start
-                self.send_packet("login_start", self.buff_type.pack_string(
-                    self.factory.profile.display_name))
+            self.send_packet("login_start", self.buff_type.pack_string(
+                self.factory.profile.display_name))
 
     # Callbacks ---------------------------------------------------------------
 
@@ -68,7 +68,8 @@ class ClientProtocol(Protocol):
 
         # Determine protocol version
         if self.factory.protocol_mode_next == "status":
-            pass
+            self.send_status_request()
+            return
         elif self.factory.force_protocol_version is not None:
             self.protocol_version = self.factory.force_protocol_version
         else:
@@ -76,7 +77,7 @@ class ClientProtocol(Protocol):
             factory.connect(self.remote_addr.host, self.remote_addr.port)
             self.protocol_version = yield factory.detected_protocol_version
 
-        self.switch_protocol_mode(self.factory.protocol_mode_next)
+        self.send_login_start()
 
     def auth_ok(self, data):
         """
@@ -203,14 +204,26 @@ class ClientProtocol(Protocol):
         if self.protocol_version >= 759:
             buff.read()  # Properties
 
-        self.switch_protocol_mode("play")
-        self.player_joined()
+        if self.protocol_version >= 764:  # 1.20.2+ go to configuration mode
+            self.send_packet("login_acknowledged")
+            self.switch_protocol_mode("configuration")
+        else:
+            self.switch_protocol_mode("play")
+            self.player_joined()
 
     def packet_login_set_compression(self, buff):
         self.set_compression(buff.unpack_varint())
 
     def packet_set_compression(self, buff):
         self.set_compression(buff.unpack_varint())
+
+    # 1.20.2+ go to play mode
+    def packet_finish_configuration(self, buff):
+        self.send_packet("finish_configuration")
+        self.switch_protocol_mode("play")
+        self.player_joined()
+
+        buff.discard()
 
     packet_disconnect = packet_login_disconnect
 

@@ -29,6 +29,7 @@ class OfflineProfile(object):
 
     def __init__(self, display_name="quarry"):
         self.display_name = display_name
+        self.uuid = UUID.from_offline_player(display_name)
 
     @classmethod
     def from_display_name(cls, display_name):

@@ -98,12 +98,19 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
             ("login", "play")
         ]
 
+        if self.protocol_version >= 764:  # 1.20.2+
+            transitions.append(("login", "configuration"))
+            transitions.append(("configuration", "play"))
+            transitions.append(("play", "configuration"))
+
         if (self.protocol_mode, mode) not in transitions:
             raise ProtocolError("Cannot switch protocol mode from %s to %s"
                                 % (self.protocol_mode, mode))
 
     def switch_protocol_mode(self, mode):
         self.check_protocol_mode_switch(mode)
+        self.in_game = mode == "play"
+
         self.protocol_mode = mode
 
     def set_compression(self, compression_threshold):
@@ -189,7 +196,7 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
     def player_joined(self):
         """Called when the player joins the game"""
 
-        self.in_game = True
+        pass
 
     def player_left(self):
         """Called when the player leaves the game"""
