@@ -25,52 +25,77 @@ class ChatRoomProtocol(ServerProtocol):
         ServerProtocol.player_joined(self)
 
         # Build up fields for "Join Game" packet
-        entity_id = 0
-        max_players = 0
-        hashed_seed = 42
-        view_distance = 2
-        simulation_distance = 2
-        game_mode = 3
-        prev_game_mode = 3
-        is_hardcore = False
-        is_respawn_screen = True
-        is_reduced_debug = False
-        is_debug = False
-        is_flat = False
+        entity_id = self.buff_type.pack("i", 0)
+        max_players = self.buff_type.pack_varint(0)
+        hashed_seed = self.buff_type.pack("q", 42)
+        view_distance = self.buff_type.pack_varint(2)
+        simulation_distance = self.buff_type.pack_varint(2)
+        game_mode = self.buff_type.pack("B", 3)
+        prev_game_mode = self.buff_type.pack("b", 3)
+        is_hardcore = self.buff_type.pack("?", False)
+        is_respawn_screen = self.buff_type.pack("?", True)
+        is_reduced_debug = self.buff_type.pack("?", False)
+        is_debug = self.buff_type.pack("?", False)
+        is_flat = self.buff_type.pack("?", False)
+        is_limited_crafting = self.buff_type.pack("?", False)
+        portal_cooldown = self.buff_type.pack_varint(0)
 
+        dimension_count = self.buff_type.pack_varint(1)
+        dimension_name = self.buff_type.pack_string("chat")
         dimension_codec = data_packs[self.protocol_version]
-        dimension_name = "minecraft:overworld"
-        dimension_tag = dimension_types[self.protocol_version, dimension_name]
-        world_count = 1
-        world_name = "chat"
+        dimension_type = "minecraft:overworld"
+        dimension_nbt = dimension_types[self.protocol_version, dimension_type]
 
         join_game = [
-            self.buff_type.pack("i?Bb", entity_id, is_hardcore, game_mode, prev_game_mode),
-            self.buff_type.pack_varint(world_count),
-            self.buff_type.pack_string(world_name),
-            self.buff_type.pack_nbt(dimension_codec),
+            entity_id,
+            is_hardcore
         ]
 
-        if self.protocol_version >= 759:  # 1.19 needs just dimension name, <1.19 needs entire dimension nbt
-            join_game.append(self.buff_type.pack_string(dimension_name))
-        else:
-            join_game.append(self.buff_type.pack_nbt(dimension_tag))
+        # 1.20.2+ moves gamemode further down
+        if self.protocol_version < 764:
+            join_game.append(game_mode)
+            join_game.append(prev_game_mode)
 
-        join_game.append(self.buff_type.pack_string(world_name))
-        join_game.append(self.buff_type.pack("q", hashed_seed))
-        join_game.append(self.buff_type.pack_varint(max_players))
-        join_game.append(self.buff_type.pack_varint(view_distance)),
+        join_game.append(dimension_count)
+        join_game.append(dimension_name)
 
-        if self.protocol_version >= 757:  # 1.18
-            join_game.append(self.buff_type.pack_varint(simulation_distance))
+        # 1.20.2+ moves these further down
+        if self.protocol_version < 764:
+            join_game.append(self.buff_type.pack_nbt(dimension_codec))
 
-        join_game.append(self.buff_type.pack("????", is_reduced_debug, is_respawn_screen, is_debug, is_flat))
+            if self.protocol_version >= 759:  # 1.19+ needs just dimension type, <1.19 needs entire dimension nbt
+                join_game.append(self.buff_type.pack_string(dimension_type))
+            else:
+                join_game.append(self.buff_type.pack_nbt(dimension_nbt))
 
-        if self.protocol_version >= 759:  # 1.19 optional last death location
+            join_game.append(dimension_name)
+            join_game.append(hashed_seed)
+
+        join_game.append(max_players)
+        join_game.append(view_distance),
+
+        if self.protocol_version >= 757:  # 1.18+
+            join_game.append(simulation_distance)
+
+        join_game.append(is_reduced_debug)
+        join_game.append(is_respawn_screen)
+
+        if self.protocol_version >= 764:  # 1.20.2+
+            join_game.append(is_limited_crafting)
+            join_game.append(self.buff_type.pack_string(dimension_type))
+            join_game.append(dimension_name)
+            join_game.append(hashed_seed)
+            join_game.append(game_mode)
+            join_game.append(prev_game_mode)
+
+        join_game.append(is_debug)
+        join_game.append(is_flat)
+
+        if self.protocol_version >= 759:  # 1.19+ optional last death location
             join_game.append(self.buff_type.pack("?", False))
 
-        if self.protocol_version >= 763:  # 1.20 portal cooldown
-            join_game.append(self.buff_type.pack_varint(0))
+        if self.protocol_version >= 763:  # 1.20+ portal cooldown
+            join_game.append(portal_cooldown)
 
         # Send "Join Game" packet
         self.send_packet("join_game", *join_game)
@@ -134,6 +159,9 @@ class ChatRoomFactory(ServerFactory):
             sender = UUID(int=0)
 
         for player in self.players:
+            if not player.in_game:
+                continue
+
             # 1.19+: Use new system message packet to avoid dealing with signatures
             if player.protocol_version >= 759:
                 if player.protocol_version >= 760:  # 1.19.1 uses a boolean for whether to show message in action bar

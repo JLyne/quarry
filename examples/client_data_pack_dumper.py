@@ -12,11 +12,27 @@ from quarry.net.auth import ProfileCLI
 
 
 class DataPackDumperProtocol(ClientProtocol):
+    def packet_registry_data(self, buff):
+        data_pack = buff.unpack_nbt()
+
+        if self.factory.output_path:
+            data_pack = NBTFile(data_pack)
+            data_pack.save(self.factory.output_path)
+        else:
+            print(alt_repr(data_pack))
+
+        buff.discard()  # Ignore the rest of the packet
+        reactor.stop()
+
     def packet_join_game(self, buff):
+        if self.protocol_version >= 764:
+            buff.discard()
+            return
+
         entity_id, is_hardcore, gamemode, prev_gamemode = buff.unpack('i?bb')
         dimension_names = [buff.unpack_string() for _ in range(buff.unpack_varint())]
         data_pack = buff.unpack_nbt()
-        buff.discard()  # Ignore the test of the packet
+        buff.discard()  # Ignore the rest of the packet
 
         if self.factory.output_path:
             data_pack = NBTFile(data_pack)
