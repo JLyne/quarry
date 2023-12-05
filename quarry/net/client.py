@@ -157,7 +157,11 @@ class ClientProtocol(Protocol):
             self.buff_type.pack('?', False))
 
     def packet_login_disconnect(self, buff):
-        p_data = buff.unpack_chat()
+        if self.protocol_version >= 765:  # 1.20.3+ ensure string and not nbt
+            p_data = buff.unpack_chat_string()
+        else:
+            p_data = buff.unpack_chat()
+
         self.logger.warn("Kicked: %s" % p_data)
         self.close()
 
