@@ -104,6 +104,11 @@ class ChatRoomProtocol(ServerProtocol):
         if self.protocol_version >= 761:
             self.send_packet("spawn_position", self.buff_type.pack("iii", 0, 0, 0))
 
+        # 1.20.3+ Send game event so client loads chunks
+        if self.protocol_version >= 765:
+            self.send_packet("change_game_state", self.buff_type.pack("Bf", 13, 0.0))
+
+
         # Send "Player Position and Look" packet
         player_position_data = [
             self.buff_type.pack("dddff?",
