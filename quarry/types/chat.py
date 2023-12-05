@@ -64,15 +64,6 @@ class Message(object):
         self.value = value
 
     @classmethod
-    def from_buff(cls, buff):
-        return cls(buff.unpack_json())
-
-    def to_bytes(self):
-        from quarry.types.buffer import Buffer
-
-        return Buffer.pack_json(self.value)
-
-    @classmethod
     def from_string(cls, string):
         return cls({'text': string})
 
@@ -110,6 +101,10 @@ class Message(object):
         if strip_styles:
             text = self.strip_chat_styles(text)
         return text
+
+    def to_nbt(self):
+        from quarry.types.nbt import TagRoot
+        return TagRoot.from_obj(self.value)
 
     @classmethod
     def strip_chat_styles(cls, text):

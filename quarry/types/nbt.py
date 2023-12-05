@@ -225,6 +225,22 @@ class TagRoot(TagCompound):
     def from_body(cls, body):
         return cls({"": body})
 
+    @classmethod
+    def from_obj(cls, obj):
+        def parse(value):
+            if isinstance(value, str):
+                return TagString(value)
+            if isinstance(value, int):
+                return TagLong(value)
+            if isinstance(value, float):
+                return TagDouble(value)
+            if isinstance(value, list):
+                return TagList([parse(v) for v in value])
+            if isinstance(value, dict):
+                return TagCompound({k: parse(v) for k, v in value.items()})
+
+        return cls.from_body(parse(obj))
+
     @property
     def body(self):
         return self.value[""]

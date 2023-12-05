@@ -300,14 +300,14 @@ class Buffer1_7(object):
         from quarry.types import chat
         if not isinstance(message, chat.Message):
             message = chat.Message.from_string(message)
-        return message.to_bytes()
+        return cls.pack_json(message.value)
 
     def unpack_chat(self):
         """
         Unpack a Minecraft chat message.
         """
         from quarry.types import chat
-        return chat.Message.from_buff(self)
+        return chat.Message(self.unpack_string())
 
     # UUID --------------------------------------------------------------------
 
