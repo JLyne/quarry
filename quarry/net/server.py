@@ -101,9 +101,14 @@ class ServerProtocol(Protocol):
                     real_kick()
             else:
                 if self.protocol_mode == "login":
-                    self.send_packet(
-                        "login_disconnect",
-                        self.buff_type.pack_chat(reason))
+                    if self.protocol_version >= 765:  # 1.20.3+ ensure string and not nbt
+                        self.send_packet(
+                            "login_disconnect",
+                            self.buff_type.pack_chat_string(reason))
+                    else:
+                        self.send_packet(
+                            "login_disconnect",
+                            self.buff_type.pack_chat(reason))
                 Protocol.close(self, reason)
         else:
             Protocol.close(self, reason)
