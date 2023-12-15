@@ -18,9 +18,9 @@ Use ``pip`` to install quarry:
 Features
 --------
 
-- Supports Minecraft versions 1.7 through 1.19.2
+- Supports Minecraft versions 1.7 through 1.20.4
 - Supports Python 3.7+
-- Built upon ``twisted`` and ``cryptography``
+- Built upon ``twisted``, ``cryptography`` and ``mutf8``
 - Exposes base classes and hooks for implementing your own client, server or
   proxy
 - Implements many Minecraft data types, such as NBT, Anvil, chunk sections,

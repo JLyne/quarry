@@ -13,6 +13,7 @@ setup(
         'bitstring >= 3.1.0',
         'cached_property >= 1.2.0',
         'twisted >= 22.0.0',
+        'mutf8 >= 1.0.3',
         'cryptography >= 0.9',
         'pyOpenSSL >= 0.15.1',
         'service_identity >= 14.0.0',
