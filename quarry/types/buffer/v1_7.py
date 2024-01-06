@@ -300,7 +300,7 @@ class Buffer1_7(object):
         from quarry.types import chat
         if not isinstance(message, chat.Message):
             message = chat.Message.from_string(message)
-        return cls.pack_json(message.value)
+        return cls.pack_string(message.to_json())
 
     def unpack_chat(self):
         """

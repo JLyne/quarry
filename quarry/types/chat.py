@@ -61,7 +61,34 @@ class Message(object):
     Represents a Minecraft chat message.
     """
     def __init__(self, value):
-        self.value = value
+        if isinstance(value, str):  # String, create component with string as text
+            self.value = {'text': value}
+        elif isinstance(value, list):  # list, create empty component with children
+            extra = []
+            for v in value:
+                if isinstance(v, Message):
+                    extra.append(v)
+                else:
+                    extra.append(Message(v))
+
+            self.value = {'text': '', 'extra': extra}
+        elif isinstance(value, dict):  # dict, validate and check for children
+            if 'text' not in value:
+                raise TypeError("Object does not contain a text property")
+
+            if 'extra' in value:
+                extra = []
+                for v in value['extra']:
+                    if isinstance(v, Message):
+                        extra.append(v)
+                    else:
+                        extra.append(Message(v))
+
+                value['extra'] = extra
+
+            self.value = value
+        else:
+            raise TypeError("Value is not a string or a list or dictionary")
 
     @classmethod
     def from_string(cls, string):
@@ -75,6 +102,8 @@ class Message(object):
         """
 
         def parse(obj):
+            if isinstance(obj, Message):  # Child components
+                return obj.to_string()
             if isinstance(obj, str):
                 return obj
             if isinstance(obj, list):
@@ -102,9 +131,21 @@ class Message(object):
             text = self.strip_chat_styles(text)
         return text
 
+    def flatten(self):
+        result = self.value.copy()
+        if 'extra' in result:
+            result['extra'] = [m.flatten() for m in result['extra']]
+
+        return result
+
     def to_nbt(self):
         from quarry.types.nbt import TagRoot
-        return TagRoot.from_obj(self.value)
+
+        # Flatten all child components to dicts first
+        return TagRoot.from_obj(self.flatten())
+
+    def to_json(self):
+        return json.dumps(self.flatten())
 
     @classmethod
     def strip_chat_styles(cls, text):
