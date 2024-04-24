@@ -13,6 +13,7 @@ from quarry.net.crypto import verify_mojang_v1_signature, verify_mojang_v2_signa
 from quarry.net.protocol import Factory, Protocol, ProtocolError, \
     protocol_modes
 from quarry.net import auth, crypto
+from quarry.types.nbt import TagRoot
 from quarry.types.uuid import UUID
 
 
@@ -56,7 +57,14 @@ class ServerProtocol(Protocol):
                     self.factory.compression_threshold))
             self.set_compression(self.factory.compression_threshold)
 
-        if self.protocol_version >= 759:  # 1.19+
+        if self.protocol_version >= 766:  # 1.20.5+
+            self.send_packet(
+                "login_success",
+                self.buff_type.pack_uuid(self.uuid) +
+                self.buff_type.pack_string(self.display_name) +
+                self.buff_type.pack_varint(0) +
+                self.buff_type.pack('?', True))  # strict error handling?
+        elif self.protocol_version >= 759:  # 1.19+
             self.send_packet(
                 "login_success",
                 self.buff_type.pack_uuid(self.uuid) +
@@ -222,11 +230,19 @@ class ServerProtocol(Protocol):
                 pack_array = lambda a: self.buff_type.pack_varint(
                     len(a), max_bits=16) + a
 
-            self.send_packet(
-                "login_encryption_request",
-                self.buff_type.pack_string(self.server_id),
-                pack_array(self.factory.public_key),
-                pack_array(self.verify_token))
+            if self.protocol_version >= 766:  # 1.20.5+
+                self.send_packet(
+                    "login_encryption_request",
+                    self.buff_type.pack_string(self.server_id),
+                    pack_array(self.factory.public_key),
+                    pack_array(self.verify_token),
+                    self.buff_type.pack('?', True))  # Should authenticate
+            else:
+                self.send_packet(
+                    "login_encryption_request",
+                    self.buff_type.pack_string(self.server_id),
+                    pack_array(self.factory.public_key),
+                    pack_array(self.verify_token))
 
         else:
             self.login_expecting = None
@@ -302,13 +318,59 @@ class ServerProtocol(Protocol):
 
     # 1.20.2+ entering configuration mode
     def packet_login_acknowledged(self, buff):
-        pack = data_packs[self.protocol_version]
-
         self.switch_protocol_mode("configuration")
-        self.send_packet("registry_data", self.buff_type.pack_nbt(pack))  # Required to get past Joining World screen
-        self.send_packet("finish_configuration")  # Tell client to leave configuration mode
+
+        if self.protocol_version >= 766:  # 1.20.5+ need to negotiate data packs before sending registry data
+            self.send_packet('select_known_packs',
+                             self.buff_type.pack_varint(1),
+                             self.buff_type.pack_string('minecraft'),
+                             self.buff_type.pack_string('core'),
+                             self.buff_type.pack_string('1.20.5'))  # FIXME:
+
+        elif self.protocol_version >= 764:  # 1.20.2+ send registry and leave configuration phase
+            pack = data_packs[self.protocol_version]
+            self.send_packet("registry_data", self.buff_type.pack_nbt(pack))  # Required to get past Joining World screen
+
+            self.send_packet("finish_configuration")  # Tell client to leave configuration mode
 
         buff.discard()
+
+    # 1.20.5+ need to negotiate data packs before sending registry data and leaving configuration mode
+    def packet_select_known_packs(self, buff):
+        has_vanilla = False
+
+        # Don't send vanilla datapack values if the client already has it
+        for i in range(buff.unpack_varint()):
+            namespace = buff.unpack_string()
+            id = buff.unpack_string()
+            version = buff.unpack_string()
+
+            if namespace == "minecraft" and id == "core":
+                has_vanilla = True
+                break
+
+        # Each registry is now sent as a separate packet
+        for registry in data_packs[self.protocol_version].body.value.values():
+            data = [
+                self.buff_type.pack_string(registry.value['type'].value),  # Registry name
+                self.buff_type.pack_varint(len(registry.value['value'].value))  # Number of items in registry
+            ]
+
+            for item in registry.value['value'].value:
+                value = item.value.get('element', None)
+
+                data.append(self.buff_type.pack_string(item.value.get('name').value))  # Item name
+                data.append(self.buff_type.pack('?', value is not None and has_vanilla is False))  # Whether value is present
+
+                # Value if present
+                if value is not None and has_vanilla is False:
+                    data.append(self.buff_type.pack_nbt(TagRoot.from_body(value)))
+
+            self.send_packet("registry_data", *data)
+
+        buff.discard()
+
+        self.send_packet("finish_configuration")  # Tell client to leave configuration mode
 
     # 1.20.2+ leaving configuration mode
     def packet_finish_configuration(self, buff):
