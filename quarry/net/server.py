@@ -1,15 +1,13 @@
 import base64
-import time
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.hashes import SHA256
-from twisted.internet import reactor, defer
+from twisted.internet import reactor
 from cached_property import cached_property
 
 from quarry.data.data_packs import data_packs
 from quarry.net.auth import PlayerPublicKey
-from quarry.net.crypto import verify_mojang_v1_signature, verify_mojang_v2_signature
 from quarry.net.protocol import Factory, Protocol, ProtocolError, \
     protocol_modes
 from quarry.net import auth, crypto
@@ -37,11 +35,6 @@ class ServerProtocol(Protocol):
     # by sending packets out-of-order or duplicated
     login_expecting = 0
 
-    # the mojang 1.7.x client has a race condition where kicking immediately
-    # after switching to "play" mode will cause a cast error in the client.
-    # the fix is to set a deferred up which will fire when it's safe again
-    safe_kick = None
-
     def __init__(self, factory, remote_addr):
         Protocol.__init__(self, factory, remote_addr)
         self.server_id = crypto.make_server_id()
@@ -49,7 +42,7 @@ class ServerProtocol(Protocol):
 
     # Convenience functions ---------------------------------------------------
     def send_login_success(self):
-        if self.factory.compression_threshold and self.protocol_version >= 47:
+        if self.factory.compression_threshold:
             # Send set compression
             self.send_packet(
                 "login_set_compression",
@@ -64,59 +57,25 @@ class ServerProtocol(Protocol):
                 self.buff_type.pack_string(self.display_name) +
                 self.buff_type.pack_varint(0) +
                 self.buff_type.pack('?', True))  # strict error handling?
-        elif self.protocol_version >= 759:  # 1.19+
+        else:
             self.send_packet(
                 "login_success",
                 self.buff_type.pack_uuid(self.uuid) +
                 self.buff_type.pack_string(self.display_name) +
                 self.buff_type.pack_varint(0))  # Profile properties
-        elif self.protocol_version > 578:
-            self.send_packet(
-                "login_success",
-                self.buff_type.pack_uuid(self.uuid) +
-                self.buff_type.pack_string(self.display_name))
-        else:
-            self.send_packet(
-                "login_success",
-                self.buff_type.pack_string(self.uuid.to_hex()) +
-                self.buff_type.pack_string(self.display_name))
-
-        if self.protocol_version <= 5:
-            def make_safe():
-                self.safe_kick.callback(None)
-                self.safe_kick = None
-
-            def make_unsafe():
-                self.safe_kick = defer.Deferred()
-                self.ticker.add_delay(10, make_safe)
-
-            make_unsafe()
 
     def close(self, reason=None):
         """Closes the connection"""
         if not self.closed and reason is not None:
             # Kick the player if possible.
             if self.protocol_mode == "play":
-                def real_kick(*a):
-                    self.send_packet(
-                        "disconnect",
-                        self.buff_type.pack_chat(reason))
-                    super(ServerProtocol, self).close(reason)
-
-                if self.safe_kick:
-                    self.safe_kick.addCallback(real_kick)
-                else:
-                    real_kick()
+                self.send_packet("disconnect", self.buff_type.pack_chat(reason))
+                super(ServerProtocol, self).close(reason)
             else:
                 if self.protocol_mode == "login":
-                    if self.protocol_version >= 765:  # 1.20.3+ ensure string and not nbt
-                        self.send_packet(
-                            "login_disconnect",
-                            self.buff_type.pack_chat_string(reason))
-                    else:
-                        self.send_packet(
-                            "login_disconnect",
-                            self.buff_type.pack_chat(reason))
+                    self.send_packet(
+                        "login_disconnect",
+                        self.buff_type.pack_chat_string(reason))
                 Protocol.close(self, reason)
         else:
             Protocol.close(self, reason)
@@ -134,9 +93,6 @@ class ServerProtocol(Protocol):
         self.display_name_confirmed = True
         self.uuid = UUID.from_hex(data['id'])
         self.send_login_success()
-
-        if self.protocol_version < 764:  # 1.20.2+ go through configuration mode first
-            self.player_joined()
 
     def player_joined(self):
         """Called when the player joins the game"""
@@ -190,45 +146,8 @@ class ServerProtocol(Protocol):
         if self.factory.online_mode:
             self.login_expecting = 1
 
-            # 1.19 - 1.19.2 may send a Mojang signed public key which needs to be verified
-            if 759 <= self.protocol_version < 761:
-                try:
-                    self.public_key_data = buff.unpack_optional(buff.unpack_player_public_key)
-                except ValueError:
-                    raise ProtocolError("Unable to parse profile public key")
-
-                # Validate public key if present
-                if self.public_key_data is not None:
-                    if self.public_key_data.expiry < time.time():
-                        raise ProtocolError("Expired profile public key")
-
-                    if self.protocol_version >= 760:
-                        if self.protocol_version >= 764:
-                            uuid = buff.unpack_uuid()  # 1.20.2 always sends player UUID
-                        else:
-                            uuid = buff.unpack_optional(buff.unpack_uuid)  # 1.19.1+ may send player UUID
-
-                        valid = verify_mojang_v2_signature(self.public_key_data, uuid)
-                    else:
-                        valid = verify_mojang_v1_signature(self.public_key_data)
-
-                    if not valid:
-                        raise ProtocolError("Invalid profile public key signature")
-
-                # If secure profiles are required, throw if no public key provided
-                elif self.factory.enforce_secure_profile:
-                    raise ProtocolError("Missing profile public key")
-
             # send encryption request
-
-            # 1.7.x
-            if self.protocol_version <= 5:
-                pack_array = lambda a: self.buff_type.pack('h', len(a)) + a
-
-            # 1.8.x
-            else:
-                pack_array = lambda a: self.buff_type.pack_varint(
-                    len(a), max_bits=16) + a
+            pack_array = lambda a: self.buff_type.pack_varint(len(a), max_bits=16) + a
 
             if self.protocol_version >= 766:  # 1.20.5+
                 self.send_packet(
@@ -250,29 +169,16 @@ class ServerProtocol(Protocol):
             self.uuid = UUID.from_offline_player(self.display_name)
             self.send_login_success()
 
-            if self.protocol_version < 764:  # 1.20.2+ go through configuration mode first
-                self.player_joined()
-
         buff.discard()
 
     def packet_login_encryption_response(self, buff):
         if self.login_expecting != 1:
             raise ProtocolError("Out-of-order login")
 
-        # 1.7.x
-        if self.protocol_version <= 5:
-            unpack_array = lambda b: b.read(b.unpack('h'))
-        # 1.8.x
-        else:
-            unpack_array = lambda b: b.read(b.unpack_varint(max_bits=16))
+        unpack_array = lambda b: b.read(b.unpack_varint(max_bits=16))
 
         p_shared_secret = unpack_array(buff)
         salt = None
-
-        # 1.19 - 1.19.2 can now sign the verify token + a salt with the players public key, rather than encrypting the token
-        if 759 <= self.protocol_version < 761:
-            if buff.unpack("?") is False:
-                salt = buff.unpack("Q").to_bytes(8, 'big')
 
         p_verify_token = unpack_array(buff)
 
@@ -316,7 +222,7 @@ class ServerProtocol(Protocol):
             remote_host)
         deferred.addCallbacks(self.auth_ok, self.auth_failed)
 
-    # 1.20.2+ entering configuration mode
+    # Entering configuration mode
     def packet_login_acknowledged(self, buff):
         self.switch_protocol_mode("configuration")
 
@@ -327,7 +233,7 @@ class ServerProtocol(Protocol):
                              self.buff_type.pack_string('core'),
                              self.buff_type.pack_string('1.20.5'))  # FIXME:
 
-        elif self.protocol_version >= 764:  # 1.20.2+ send registry and leave configuration phase
+        else:
             pack = data_packs[self.protocol_version]
             self.send_packet("registry_data", self.buff_type.pack_nbt(pack))  # Required to get past Joining World screen
 
@@ -372,7 +278,7 @@ class ServerProtocol(Protocol):
 
         self.send_packet("finish_configuration")  # Tell client to leave configuration mode
 
-    # 1.20.2+ leaving configuration mode
+    # Leaving configuration mode
     def packet_finish_configuration(self, buff):
         # Go to play mode
         if not self.in_game:

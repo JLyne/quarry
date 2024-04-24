@@ -3,8 +3,8 @@ import os.path
 import bitstring
 
 from quarry.types.buffer import Buffer1_13_2, Buffer1_14
-from quarry.types.chunk import PackedArray, BlockArray
-from quarry.types.registry import OpaqueRegistry, BitShiftRegistry
+from quarry.types.chunk import BlockArray
+from quarry.types.registry import OpaqueRegistry
 from quarry.types.nbt import TagCompound
 
 TagCompound.preserve_order = True # for testing purposes.

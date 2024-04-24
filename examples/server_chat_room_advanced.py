@@ -3,7 +3,6 @@ Example "chat room" server which supports chat signing
 
 Clients on versions which use the same method of chat signing will receive signed messages from each other.
 Clients which use a different method of signing will receive system messages.
-Clients that don't support signing will receive regular chat messages.
 
 This example also implements the player list, which is used for sending the player public keys required for verifying
 signed chat.
@@ -11,8 +10,6 @@ signed chat.
 Signed chat messages are verified in a similar way to the vanilla server. Messages with an invalid signature, with a
 timestamp older than the previous message, or with an invalid last seen list will not be accepted.
 If the server is started in offline mode, it will not attempt to verify signed messages.
-
-Supports Minecraft 1.16.3+.
 """
 from typing import List
 
@@ -40,25 +37,20 @@ class ChatRoomProtocol(ServerProtocol):
         # Send join game packet
         self.factory.send_join_game(self)
 
-        # 1.19.3+ Send default spawn position, required to hide Loading Terrain screen
-        if self.protocol_version >= 761:
-            self.send_packet("spawn_position", self.buff_type.pack("iii", 0, 0, 0))
+        # Send default spawn position, required to hide Loading Terrain screen
+        self.send_packet("spawn_position", self.buff_type.pack("iii", 0, 0, 0))
 
         # Send "Player Position and Look" packet
         player_position_data = [
             self.buff_type.pack("dddff?",
                 0,                         # x
-                500,                       # y  Must be >= build height to pass the "Loading Terrain" screen on 1.18.2
+                500,                       # y  Must be >= build height to pass the "Loading Terrain" screen
                 0,                         # z
                 0,                         # yaw
                 0,                         # pitch
                 0b00000),                  # flags
             self.buff_type.pack_varint(0)  # teleport id
         ]
-
-        # <1.19.4 needs flag for leaving vehicle
-        if self.protocol_version < 762:
-            player_position_data.append(self.buff_type.pack("?", True)) # Leave vehicle
 
         # Start sending "Keep Alive" packets
         self.ticker.add_loop(20, self.update_keep_alive)
@@ -85,42 +77,37 @@ class ChatRoomProtocol(ServerProtocol):
 
         message = buff.unpack_string()
 
-        # 1.19+, messages may be signed
-        if self.protocol_version >= 759:
-            timestamp = buff.unpack('Q')
-            salt = buff.unpack('Q')
-            signature = buff.unpack_byte_array()
-            signature_version = 760 if self.protocol_version >= 760 else 759  # 1.19.1 signature format is different
-            buff.unpack('?')  # Whether preview was accepted, not implemented here
-            last_seen = []
-            last_received = None
+        # Messages may be signed
+        timestamp = buff.unpack('Q')
+        salt = buff.unpack('Q')
+        signature = buff.unpack_byte_array()
+        buff.unpack('?')  # Whether preview was accepted, not implemented here
+        last_seen = []
+        last_received = None
 
-            # Ignore signature if player has no key (i.e offline mode)
-            if self.public_key_data is None:
-                signature = None
-            else:
-                # 1.19.1+ includes list of "last seen" messages
-                if self.protocol_version >= 760:
-                    last_seen = buff.unpack_last_seen_list()  # List of previously sent messages acknowledged by the client
-                    last_received = buff.unpack_optional(buff.pack_last_seen_entry)  # Optional "last received" message
-
-            header = SignedMessageHeader(self.uuid, self.previous_signature)
-            body = SignedMessageBody(message, timestamp, salt, None, last_seen)
-            signed_message = SignedMessage(header, signature, signature_version, body)
-
-            # Validate the message
-            if self.validate_signed_message(signed_message, last_received) is False:
-                buff.discard()
-                return
-
-            # Update previous message data from current message
-            self.previous_timestamp = signed_message.body.timestamp
-            self.previous_signature = signed_message.signature
-            self.previously_seen = signed_message.body.last_seen
-
-            self.factory.broadcast_signed_chat(signed_message, self.display_name)
+        # Ignore signature if player has no key (i.e offline mode)
+        if self.public_key_data is None:
+            signature = None
         else:
-            self.factory.broadcast_unsigned_chat(message, self.uuid, self.display_name)
+            # Handle list of "last seen" messages
+            last_seen = buff.unpack_last_seen_list()  # List of previously sent messages acknowledged by the client
+            last_received = buff.unpack_optional(buff.pack_last_seen_entry)  # Optional "last received" message
+
+        header = SignedMessageHeader(self.uuid, self.previous_signature)
+        body = SignedMessageBody(message, timestamp, salt, None, last_seen)
+        signed_message = SignedMessage(header, signature, body)
+
+        # Validate the message
+        if self.validate_signed_message(signed_message, last_received) is False:
+            buff.discard()
+            return
+
+        # Update previous message data from current message
+        self.previous_timestamp = signed_message.body.timestamp
+        self.previous_signature = signed_message.signature
+        self.previously_seen = signed_message.body.last_seen
+
+        self.factory.broadcast_signed_chat(signed_message, self.display_name)
 
         buff.discard()
 
@@ -225,25 +212,11 @@ class ChatRoomFactory(ServerFactory):
     motd = "Chat Room Server"
 
     def send_server_data(self, player):
-        # 1.19.3+ removed chat preview field
-        if player.protocol_version >= 761:
-            player.send_packet('server_data',
-                               player.buff_type.pack('???',
-                                                     False,
-                                                     False,
-                                                     self.online_mode))  # Enforce chat signing when in online mode
-
-        # 1.19 added enforce chat signing field
-        elif player.protocol_version >= 760:
-            player.send_packet('server_data',
-                               player.buff_type.pack('????',
-                                                     False,
-                                                     False,
-                                                     False,
-                                                     self.online_mode))  # Enforce chat signing when in online mode
-
-        elif player.protocol_version == 759:
-            player.send_packet('server_data', self.buff_type.pack('???', False, False, False))
+        player.send_packet('server_data',
+                           player.buff_type.pack('???',
+                                                 False,
+                                                 False,
+                                                 self.online_mode))  # Enforce chat signing when in online mode
 
     def send_join_game(self, player):
         # Build up fields for "Join Game" packet
@@ -273,96 +246,59 @@ class ChatRoomFactory(ServerFactory):
             is_hardcore
         ]
 
-        # 1.20.2+ moves gamemode further down
-        if player.protocol_version < 764:
-            join_game.append(game_mode)
-            join_game.append(prev_game_mode)
-
         join_game.append(dimension_count)
         join_game.append(dimension_name)
 
-        # 1.20.2+ moves these further down
-        if player.protocol_version < 764:
-            join_game.append(player.buff_type.pack_string(dimension_codec))
-
-            if player.protocol_version >= 759:  # 1.19+ needs just dimension type, <1.19 needs entire dimension nbt
-                join_game.append(dimension_type)
-            else:
-                join_game.append(player.buff_type.pack_nbt(dimension_nbt))
-
-            join_game.append(dimension_name)
-            join_game.append(hashed_seed)
-
         join_game.append(max_players)
         join_game.append(view_distance),
-
-        if player.protocol_version >= 757:  # 1.18+
-            join_game.append(simulation_distance)
+        join_game.append(simulation_distance)
 
         join_game.append(is_reduced_debug)
         join_game.append(is_respawn_screen)
 
-        if player.protocol_version >= 764:  # 1.20.2+
-            join_game.append(is_limited_crafting)
-            join_game.append(dimension_type)
-            join_game.append(dimension_name)
-            join_game.append(hashed_seed)
-            join_game.append(game_mode)
-            join_game.append(prev_game_mode)
+        join_game.append(is_limited_crafting)
+        join_game.append(dimension_type)
+        join_game.append(dimension_name)
+        join_game.append(hashed_seed)
+        join_game.append(game_mode)
+        join_game.append(prev_game_mode)
 
         join_game.append(is_debug)
         join_game.append(is_flat)
 
-        if player.protocol_version >= 759:  # 1.19+ optional last death location
-            join_game.append(player.buff_type.pack("?", False))
+        # Optional last death location
+        join_game.append(player.buff_type.pack("?", False))
 
-        if player.protocol_version >= 763:  # 1.20+ portal cooldown
-            join_game.append(portal_cooldown)
+        # Portal cooldown
+        join_game.append(portal_cooldown)
+
+        if player.protocol_version >= 766:  # 1.20.5 enable secure chat
+            join_game.append(player.buff_type.pack("?", True))
 
         # Send "Join Game" packet
         player.send_packet("join_game", *join_game)
 
-    # Sends a signed chat message to supporting clients
+    # Sends a signed chat message to clients
     def broadcast_signed_chat(self, message: SignedMessage, sender_name):
         for player in self.players:
             if player.protocol_mode != 'play':
                 continue
 
-            # Only send signed messages to clients that support the same signing method
-            if message.signature_version == player.protocol_version:
-                self.send_signed_chat(player, message, sender_name)
-            else:
-                self.send_unsigned_chat(player, message.body.message, message.header.sender, sender_name)
+            self.send_signed_chat(player, message, sender_name)
 
     def send_signed_chat(self, player: ChatRoomProtocol, message: SignedMessage, sender_name):
         # Add to player's pending messages for later last seen validation
         if self.online_mode:
             player.pending_messages.append(LastSeenMessage(message.header.sender, message.signature))
 
-        if player.protocol_version >= 760:
-            player.send_packet("chat_message",
-                               player.buff_type.pack_signed_message(message),
-                               player.buff_type.pack_varint(0),  # Chat filtering result, 0 = not filtered
-                               player.buff_type.pack_varint(0),  # Message type
-                               player.buff_type.pack_chat(sender_name),  # Sender display name
-                               player.buff_type.pack('?', False))  # No team name
+        player.send_packet("chat_message",
+                           player.buff_type.pack_signed_message(message),
+                           player.buff_type.pack_varint(0),  # Chat filtering result, 0 = not filtered
+                           player.buff_type.pack_varint(0),  # Message type
+                           player.buff_type.pack_chat(sender_name),  # Sender display name
+                           player.buff_type.pack('?', False))  # No team name
 
-        # 1.19
-        else:
-            player.send_packet("chat_message",
-                               player.buff_type.pack_chat(message.body.message),  # Original message
-                               # Optional decorated message
-                               player.buff_type.pack_optional(player.buff_type.pack_chat,
-                                                              message.body.decorated_message),
-                               player.buff_type.pack_varint(0),  # Message type, 0 = chat
-                               player.buff_type.pack_uuid(message.header.sender),  # Sender UUID
-                               player.buff_type.pack_chat(sender_name),  # Sender display name
-                               player.buff_type.pack('?', False),  # Optional team name
-                               # Timestamp, salt
-                               player.buff_type.pack('QQ', message.body.timestamp, message.body.salt),
-                               player.buff_type.pack_byte_array(message.signature or b''))  # Signature
-
-    # Sends an unsigned chat message, using system messages on supporting clients
+    # Sends an unsigned chat message using system messages
     def broadcast_unsigned_chat(self, message: str, sender: UUID, sender_name: str):
         for player in self.players:
             if player.protocol_mode != 'play':
@@ -371,14 +307,8 @@ class ChatRoomFactory(ServerFactory):
             self.send_unsigned_chat(player, message, sender, sender_name)
 
     def send_unsigned_chat(self, player: ChatRoomProtocol, message: str, sender: UUID, sender_name: str):
-        # 1.19+ Send as system message to avoid client signature warnings
-        if player.protocol_version >= 759:
-            self.send_system(player, "<%s> %s" % (sender_name, message))
-        else:  # Send regular chat message
-            player.send_packet("chat_message",
-                               player.buff_type.pack_chat("<%s> %s" % (sender_name, message)),
-                               player.buff_type.pack('B', 0),
-                               player.buff_type.pack_uuid(sender))
+        # Send as system message to avoid client signature warnings
+        self.send_system(player, "<%s> %s" % (sender_name, message))
 
     # Sends a system message, falling back to chat messages on older clients
     def broadcast_system(self, message: str):
@@ -390,19 +320,9 @@ class ChatRoomFactory(ServerFactory):
 
     @staticmethod
     def send_system(player: ChatRoomProtocol, message: str):
-        if player.protocol_version >= 760:  # 1.19.1+
-            player.send_packet("system_message",
-                               player.buff_type.pack_chat(message),
-                               player.buff_type.pack('?', False))  # Overlay, false = display in chat
-        elif player.protocol_version == 759:  # 1.19
-            player.send_packet("system_message",
-                               player.buff_type.pack_chat(message),
-                               player.buff_type.pack_varint(1))
-        else:
-            player.send_packet("chat_message",
-                               player.buff_type.pack_chat(message),
-                               player.buff_type.pack('B', 0),
-                               player.buff_type.pack_uuid(UUID(int=0)))
+        player.send_packet("system_message",
+                           player.buff_type.pack_chat(message),
+                           player.buff_type.pack('?', False))  # Overlay, false = display in chat
 
     # Announces player join
     def broadcast_player_join(self, joined: ChatRoomProtocol):
@@ -425,14 +345,8 @@ class ChatRoomFactory(ServerFactory):
     def send_player_list_add(player: ChatRoomProtocol, added: List[ChatRoomProtocol]):
         data = []
 
-        # 1.19.3+ splits the player list into separate remove and update packets (which also add players)
         # Update packets use a bitset to indicate which player information is being added/updated
-        if player.protocol_version >= 761:
-            data.append(player.buff_type.pack('B', 63))  # Set first 6 bits to indicate all fields are being updated
-
-        else:  # Older versions have a single packet with a varint for "action", 0 being adding a player
-            data.append(player.buff_type.pack_varint(0))
-
+        data.append(player.buff_type.pack('B', 63))  # Set first 6 bits to indicate all fields are being updated
         data.append(player.buff_type.pack_varint(len(added)))  # Player entry count
 
         for entry in added:
@@ -443,22 +357,16 @@ class ChatRoomFactory(ServerFactory):
             data.append(player.buff_type.pack_string(entry.display_name))  # Player name
             data.append(player.buff_type.pack_varint(0))  # Empty properties list
 
-            # 1.19.3+ include the players public key here
-            if player.protocol_version >= 761:
-                data.append(player.buff_type.pack('?', False))
+            # Include the players public key here
+            data.append(player.buff_type.pack('?', False))
 
             data.append(player.buff_type.pack_varint(3))  # Gamemode
 
-            # 1.19.3+ includes an extra field for whether to update the tab list
-            if player.protocol_version >= 761:
-                data.append(player.buff_type.pack('?', True))
+            # Extra field for whether to update the tab list
+            data.append(player.buff_type.pack('?', True))
 
             data.append(player.buff_type.pack_varint(0))  # Latency
             data.append(player.buff_type.pack('?', False))  # No display name
-
-            # 1.19 - 1.19.1 include the players public key here
-            if 759 <= player.protocol_version < 761:
-                data.append(player.buff_type.pack_optional(player.buff_type.pack_player_public_key, entry.public_key_data))
 
         player.send_packet('player_list_item', *data)
 
@@ -467,16 +375,9 @@ class ChatRoomFactory(ServerFactory):
         for player in self.players:
             if player.protocol_mode == 'play' and player != removed:
 
-                if player.protocol_version >= 761:  # 1.19.3 has separate packet for player list removals
-                    player.send_packet('player_list_remove',
-                                       player.buff_type.pack_varint(1),  # Player entry count
-                                       player.buff_type.pack_uuid(removed.uuid))  # Player UUID
-                else:
-                    player.send_packet('player_list_item',
-                                       player.buff_type.pack_varint(4),  # Action - 4 = Player remove
-                                       player.buff_type.pack_varint(1),  # Player entry count
-                                       player.buff_type.pack_uuid(removed.uuid))  # Player UUID
-
+                player.send_packet('player_list_remove',
+                                   player.buff_type.pack_varint(1),  # Player entry count
+                                   player.buff_type.pack_uuid(removed.uuid))  # Player UUID
 
 def main(argv):
     # Parse options

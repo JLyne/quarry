@@ -49,6 +49,7 @@ class Registry(object):
 
         raise NotImplementedError
 
+
 class OpaqueRegistry(Registry):
     """
     Registry that passes IDs through unchanged. This is the default.
@@ -66,24 +67,9 @@ class OpaqueRegistry(Registry):
     def is_air_block(self, obj): return obj == 0
 
 
-class BitShiftRegistry(OpaqueRegistry):
-    """
-    Registry implementing the Minecraft 1.7 - 1.12 bit-shift format for blocks.
-
-    Blocks decode to a ``(block_id, metadata)`` pair. Items pass through
-    unchanged.
-    """
-
-    max_bits = 13
-
-    def encode_block(self, obj): return (obj[0] << 4) | obj[1]
-    def decode_block(self, val): return val >> 4, val & 0x0F
-    def is_air_block(self, obj): return obj[0] == 0
-
-
 class LookupRegistry(Registry):
     """
-    Registry implementing a dictionary lookup, recommended for 1.13+.
+    Registry implementing a dictionary lookup.
 
     Blocks decode to a ``dict`` where the only guaranteed key is ``'name'``.
     Items decode to a ``str`` name.

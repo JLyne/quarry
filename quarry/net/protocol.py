@@ -95,13 +95,11 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
         transitions = [
             ("init", "status"),
             ("init", "login"),
-            ("login", "play")
+            ("login", "play"),
+            ("login", "configuration"),
+            ("configuration", "play"),
+            ("play", "configuration")
         ]
-
-        if self.protocol_version >= 764:  # 1.20.2+
-            transitions.append(("login", "configuration"))
-            transitions.append(("configuration", "play"))
-            transitions.append(("play", "configuration"))
 
         if (self.protocol_mode, mode) not in transitions:
             raise ProtocolError("Cannot switch protocol mode from %s to %s"

@@ -1,7 +1,5 @@
 """
 Dumps the data pack info from the "join_game" packet to a file.
-
-Supports Minecraft 1.16.3+.
 """
 
 from __future__ import print_function
@@ -46,25 +44,11 @@ class DataPackDumperProtocol(ClientProtocol):
             else:
                 print(alt_repr(data_pack))
 
-        buff.discard()  # Ignore the rest of the packet
-        reactor.stop()
+            buff.discard()  # Ignore the rest of the packet
+            reactor.stop()
 
     def packet_join_game(self, buff):
-        if self.protocol_version >= 764:
-            buff.discard()
-            return
-
-        entity_id, is_hardcore, gamemode, prev_gamemode = buff.unpack('i?bb')
-        dimension_names = [buff.unpack_string() for _ in range(buff.unpack_varint())]
-        data_pack = buff.unpack_nbt()
-        buff.discard()  # Ignore the rest of the packet
-
-        if self.factory.output_path:
-            data_pack = NBTFile(data_pack)
-            data_pack.save(self.factory.output_path)
-        else:
-            print(alt_repr(data_pack))
-
+        buff.discard()
         reactor.stop()
 
 

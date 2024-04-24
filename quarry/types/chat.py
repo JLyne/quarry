@@ -177,7 +177,7 @@ class LastSeenMessage(object):
 
 class SignedMessageHeader(object):
     """
-    Represents the header of a signed minecraft chat message sent from a 1.19+ client
+    Represents the header of a signed minecraft chat message
     Includes the sender UUID and optional signature of the preceding message
     """
 
@@ -195,7 +195,7 @@ class SignedMessageHeader(object):
 
 class SignedMessageBody(object):
     """
-    Represents the body of a signed minecraft chat message sent from a 1.19+ client
+    Represents the body of a signed minecraft chat message
     Includes the message content, optional decorated message, timestamp and salt
     """
 
@@ -240,7 +240,7 @@ class SignedMessageBody(object):
 
 class SignedMessage(object):
     """
-    Represents a signed minecraft chat message sent from a 1.19+ client
+    Represents a signed minecraft chat message
     Includes:
      - The message header, containing the sender UUID and optionally the previous message's signature,
      - The message body, containing the signed message, optional signed decorated message, timestamp and salt
@@ -248,14 +248,10 @@ class SignedMessage(object):
      - Optional unsigned message content
     """
 
-    def __init__(self, header: SignedMessageHeader, signature: bytes, signature_version: int, body: SignedMessageBody,
+    def __init__(self, header: SignedMessageHeader, signature: bytes, body: SignedMessageBody,
                  unsigned_content: Message = None):
-        if signature_version < 759:
-            raise Exception("Signed messages are not supported below protocol version 759")
-
         self.header = header
         self.signature = signature
-        self.signature_version = signature_version
         self.body = body
         self.unsigned_content = unsigned_content
 
@@ -265,19 +261,10 @@ class SignedMessage(object):
         if key is None or self.header.sender is None:
             return False
 
-        # 1.19.1 +
-        if self.signature_version >= 760:
-            if self.header.previous_signature is not None:
-                data = data + self.header.previous_signature
+        if self.header.previous_signature is not None:
+            data = data + self.header.previous_signature
 
-            data = data + self.header.sender.bytes + self.body.digest()
-
-        # 1.19
-        else:
-            data = data + self.body.salt.to_bytes(8, 'big') \
-                   + self.header.sender.bytes \
-                   + int(self.body.timestamp / 1000).to_bytes(8, 'big') \
-                   + json.dumps(Message.from_string(self.body.message).value, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        data = data + self.header.sender.bytes + self.body.digest()
 
         try:
             key.verify(self.signature, data, PKCS1v15(), SHA256())
@@ -290,6 +277,5 @@ class SignedMessage(object):
             return self.header == other.header \
                    and self.body == other.body \
                    and self.signature == other.signature \
-                   and self.signature_version == other.signature_version \
                    and self.unsigned_content == other.unsigned_content
         return NotImplemented

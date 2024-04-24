@@ -125,21 +125,6 @@ def get_yggdrasil_session_key():
     return _yggdrasil_key
 
 
-# Verify 1.19 signature
-def verify_mojang_v1_signature(data: PlayerPublicKey):
-    # Need key in PEM format
-    key_text = base64.encodebytes(data.key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)).decode('ISO-8859-1')
-    e = "-----BEGIN RSA PUBLIC KEY-----\n" + key_text + "-----END RSA PUBLIC KEY-----\n"
-
-    try:
-        # Signature is timestamp as string + public key in PEM format
-        get_yggdrasil_session_key().verify(data.signature, bytes(str(data.expiry) + e, 'ascii'), PKCS1v15(), SHA1())
-        return True
-    except InvalidSignature:
-        return False
-
-
-# Verify 1.19.1+ signature
 def verify_mojang_v2_signature(data: PlayerPublicKey, uuid):
     if uuid is None:
         return False

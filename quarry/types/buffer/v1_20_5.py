@@ -46,8 +46,8 @@ class Buffer1_20_5(Buffer1_20_3):
             elif ty == 26: out += cls.pack_varint(val)
             elif ty == 27: out += cls.pack_varint(val)
             elif ty == 28: out += cls.pack_varint(val)
-            elif ty == 29: raise ValueError("TODO")  # Vector3
-            elif ty == 30: raise ValueError("TODO")  # Quaternion
+            elif ty == 29: out += cls.pack('fff', val[0], val[1], val[2])  # Vector
+            elif ty == 30: out += cls.pack('ffff', val[0], val[1], val[2], val[3])  # Quaternion
             else: raise ValueError("Unknown entity metadata type: %d" % ty)
         out += cls.pack('B', 255)
         return out
@@ -92,7 +92,7 @@ class Buffer1_20_5(Buffer1_20_3):
             elif ty == 26: val = self.unpack_varint()
             elif ty == 27: val = self.unpack_varint()
             elif ty == 28: val = self.unpack_varint()
-            elif ty == 29: raise ValueError("TODO")  # Vector3
-            elif ty == 30: raise ValueError("TODO")  # Quaternion
+            elif ty == 29: val = (self.unpack('f'), self.unpack('f'), self.unpack('f'))  # Vector
+            elif ty == 30: val = (self.unpack('f'), self.unpack('f'), self.unpack('f'), self.unpack('f'))  # Quaternion
             else: raise ValueError("Unknown entity metadata type: %d" % ty)
             metadata[ty, key] = val
