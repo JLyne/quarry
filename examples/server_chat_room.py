@@ -25,13 +25,13 @@ class ChatRoomProtocol(ServerProtocol):
         ServerProtocol.player_joined(self)
 
         # Build up fields for "Join Game" packet
-        entity_id = self.buff_type.pack("i", 0)
-        max_players = self.buff_type.pack_varint(0)
-        hashed_seed = self.buff_type.pack("q", 42)
-        view_distance = self.buff_type.pack_varint(2)
-        simulation_distance = self.buff_type.pack_varint(2)
-        game_mode = self.buff_type.pack("B", 3)
-        prev_game_mode = self.buff_type.pack("b", 3)
+        entity_id = self.buff_type.pack("i", 830)
+        max_players = self.buff_type.pack_varint(20)
+        hashed_seed = self.buff_type.pack("q", 3072375911354491907)
+        view_distance = self.buff_type.pack_varint(10)
+        simulation_distance = self.buff_type.pack_varint(10)
+        game_mode = self.buff_type.pack("B", 0)
+        prev_game_mode = self.buff_type.pack("b", -1)
         is_hardcore = self.buff_type.pack("?", False)
         is_respawn_screen = self.buff_type.pack("?", True)
         is_reduced_debug = self.buff_type.pack("?", False)
@@ -40,11 +40,12 @@ class ChatRoomProtocol(ServerProtocol):
         is_limited_crafting = self.buff_type.pack("?", False)
         portal_cooldown = self.buff_type.pack_varint(0)
 
-        dimension_count = self.buff_type.pack_varint(1)
-        dimension_name = self.buff_type.pack_string("chat")
-        dimension_codec = data_packs[self.protocol_version]
+        dimension_count = self.buff_type.pack_varint(3)
+        dimension_name = self.buff_type.pack_string("minecraft:overworld")
+        dimension_name2 = self.buff_type.pack_string("minecraft:the_nether")
+        dimension_name3 = self.buff_type.pack_string("minecraft:the_end")
         dimension_type = "minecraft:overworld"
-        dimension_nbt = dimension_types[self.protocol_version, dimension_type]
+
 
         join_game = [
             entity_id,
@@ -58,9 +59,13 @@ class ChatRoomProtocol(ServerProtocol):
 
         join_game.append(dimension_count)
         join_game.append(dimension_name)
+        join_game.append(dimension_name2)
+        join_game.append(dimension_name3)
 
         # 1.20.2+ moves these further down
         if self.protocol_version < 764:
+            dimension_nbt = dimension_types[self.protocol_version, dimension_type]
+            dimension_codec = data_packs[self.protocol_version]
             join_game.append(self.buff_type.pack_nbt(dimension_codec))
 
             if self.protocol_version >= 759:  # 1.19+ needs just dimension type, <1.19 needs entire dimension nbt
@@ -82,7 +87,12 @@ class ChatRoomProtocol(ServerProtocol):
 
         if self.protocol_version >= 764:  # 1.20.2+
             join_game.append(is_limited_crafting)
-            join_game.append(self.buff_type.pack_string(dimension_type))
+
+            if self.protocol_version >= 766:  # 1.20.5+ Dimension type is now varint id
+                join_game.append(self.buff_type.pack_varint(0))
+            else:
+                join_game.append(self.buff_type.pack_string(dimension_type))
+
             join_game.append(dimension_name)
             join_game.append(hashed_seed)
             join_game.append(game_mode)
@@ -96,6 +106,9 @@ class ChatRoomProtocol(ServerProtocol):
 
         if self.protocol_version >= 763:  # 1.20+ portal cooldown
             join_game.append(portal_cooldown)
+
+        if self.protocol_version >= 766:  # 1.20.5 disable secure chat
+            join_game.append(self.buff_type.pack("?", False))
 
         # Send "Join Game" packet
         self.send_packet("join_game", *join_game)
