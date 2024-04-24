@@ -221,6 +221,12 @@ class ClientProtocol(Protocol):
     def packet_set_compression(self, buff):
         self.set_compression(buff.unpack_varint())
 
+    # 1.20.5+ negotiate data packs
+    def packet_select_known_packs(self, buff):
+        buff.discard()
+        self.send_packet('select_known_packs',
+                         self.buff_type.pack_varint(0))
+
     # 1.20.2+ go to play mode
     def packet_finish_configuration(self, buff):
         self.send_packet("finish_configuration")
