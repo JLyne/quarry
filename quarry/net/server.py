@@ -1,4 +1,7 @@
 import base64
+import hmac
+import random
+from copy import deepcopy
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
@@ -39,6 +42,7 @@ class ServerProtocol(Protocol):
         Protocol.__init__(self, factory, remote_addr)
         self.server_id = crypto.make_server_id()
         self.verify_token = crypto.make_verify_token()
+        self.velocity_message_id = random.randint(0, 2147483647)
 
     # Convenience functions ---------------------------------------------------
     def send_login_success(self):
@@ -132,6 +136,16 @@ class ServerProtocol(Protocol):
             else:
                 self.factory.players.add(self)
 
+        if self.factory.bungeecord_forwarding is True:
+            # Bungeecord ip forwarding, ip/uuid is included in host string separated by \00s
+            split_host = str.split(p_connect_host, "\00")
+
+            if len(split_host) < 3:
+                raise ProtocolError("Invalid bungeecord forwarding data")
+
+            self.connect_host = split_host[1]
+            self.uuid = UUID.from_hex(split_host[2])
+
         self.protocol_version = p_protocol_version
         self.buff_type = self.factory.get_buff_type(self.protocol_version)
         self.connect_host = p_connect_host
@@ -163,6 +177,12 @@ class ServerProtocol(Protocol):
                     pack_array(self.factory.public_key),
                     pack_array(self.verify_token))
 
+        elif self.factory.velocity_forwarding:
+            self.login_expecting = 2
+            self.send_packet("login_plugin_request",
+                             self.buff_type.pack_varint(self.velocity_message_id),
+                             self.buff_type.pack_string("velocity:player_info"),
+                             b'')
         else:
             self.login_expecting = None
             self.display_name_confirmed = True
@@ -170,6 +190,43 @@ class ServerProtocol(Protocol):
             self.send_login_success()
 
         buff.discard()
+
+    def packet_login_plugin_response(self, buff):
+        if self.login_expecting != 2 or self.protocol_mode != "login":
+            raise ProtocolError("Out-of-order login")
+
+        message_id = buff.unpack_varint()
+        successful = buff.unpack('b')
+
+        if message_id != self.velocity_message_id:
+            raise ProtocolError("Unexpected login_plugin_response")
+
+        if not successful or len(buff) == 0:
+            raise ProtocolError("Empty velocity forwarding response")
+
+        # Verify HMAC
+        signature = buff.read(32)
+        verify = hmac.new(key=str.encode(self.factory.velocity_forwarding_secret), msg=deepcopy(buff).read(),
+                          digestmod="sha256").digest()
+
+        if verify != signature:
+            raise ProtocolError("Invalid velocity forwarding response received")
+
+        version = buff.unpack_varint()
+
+        if version != 1:
+            raise ProtocolError("Unsupported velocity forwarding version")
+
+        buff.unpack_string()  # Ip
+
+        self.uuid = buff.unpack_uuid()
+        self.display_name = buff.unpack_string()
+
+        buff.discard()  # Don't care about the rest
+
+        self.login_expecting = None
+        self.display_name_confirmed = True
+        self.send_login_success()
 
     def packet_login_encryption_response(self, buff):
         if self.login_expecting != 1:
@@ -329,6 +386,9 @@ class ServerFactory(Factory):
     online_mode = True
     enforce_secure_profile = False
     prevent_proxy_connections = True
+    bungeecord_forwarding = False
+    velocity_forwarding = False
+    velocity_forwarding_secret = None
     compression_threshold = 256
     auth_timeout = 30
     players = None
@@ -340,6 +400,12 @@ class ServerFactory(Factory):
         self.public_key = crypto.export_public_key(self.keypair)
 
     def listen(self, host, port=25565):
+        if self.bungeecord_forwarding or self.velocity_forwarding:
+            self.online_mode = False
+
+        if self.velocity_forwarding and self.velocity_forwarding_secret is None:
+            raise TypeError('No velocity forwarding secret provided')
+
         reactor.listenTCP(port, self, interface=host)
 
     @cached_property
