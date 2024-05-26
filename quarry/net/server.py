@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.hashes import SHA256
 from twisted.internet import reactor
 from cached_property import cached_property
 
-from quarry.data.data_packs import vanilla_data_packs, configuration_registries
+from quarry.data.data_packs import configurable_registries
 from quarry.net.auth import PlayerPublicKey
 from quarry.net.protocol import Factory, Protocol, ProtocolError, \
     protocol_modes
@@ -104,12 +104,10 @@ class ServerProtocol(Protocol):
 
     def send_registries(self, exclude: List[Tuple[NamespacedKey, str]]):
         if self.protocol_version < 766:  # <1.20.5 sends all registries at once
-            pack = vanilla_data_packs[self.protocol_version]
-            # FIXME: Ignores other data packs currently
-            self.send_packet("registry_data", self.buff_type.pack_nbt(TagRoot.from_body(pack.contents)))  # Required to get past Joining World screen
+            self.send_packet("registry_data", self.buff_type.pack_nbt(self.data_packs.get_nbt_codec()))
 
         else:  # 1.20.5+ Each registry is now sent as a separate packet
-            for registry in configuration_registries:
+            for registry in configurable_registries[self.protocol_version]:
                 registry_data = self.data_packs.get_registry(registry, *exclude)
 
                 data = [

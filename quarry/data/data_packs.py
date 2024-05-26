@@ -24,7 +24,7 @@ def _load() -> Dict[int, DataPack]:
         nbt = NBTFile.load(nbt_path).root_tag.body
         contents = {}
 
-        for registry_id in configuration_registries:
+        for registry_id in configurable_registries[protocol_version]:
             registry = nbt.value.get(str(registry_id), None)
             values = {}
 
@@ -48,12 +48,25 @@ pack_formats = {
     766: 45
 }
 
-configuration_registries = [NamespacedKey.minecraft('worldgen/biome'),
-                            NamespacedKey.minecraft('chat_type'),
-                            NamespacedKey.minecraft('trim_pattern'),
-                            NamespacedKey.minecraft('trim_material'),
-                            NamespacedKey.minecraft('wolf_variant'),
-                            NamespacedKey.minecraft('dimension_type'),
-                            NamespacedKey.minecraft('damage_type'),
-                            NamespacedKey.minecraft('banner_pattern')]
+configurable_registries = {
+    765: [
+        NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('chat_type'),
+        NamespacedKey.minecraft('trim_pattern'),
+        NamespacedKey.minecraft('trim_material'),
+        NamespacedKey.minecraft('dimension_type'),
+        NamespacedKey.minecraft('damage_type')
+    ],
+    766: [
+        NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('chat_type'),
+        NamespacedKey.minecraft('trim_pattern'),
+        NamespacedKey.minecraft('trim_material'),
+        NamespacedKey.minecraft('wolf_variant'),
+        NamespacedKey.minecraft('dimension_type'),
+        NamespacedKey.minecraft('damage_type'),
+        NamespacedKey.minecraft('banner_pattern')
+    ]
+}
+
 vanilla_data_packs: Dict[int, DataPack] = _load()

@@ -1,9 +1,10 @@
 from collections import deque
 from typing import Dict, Deque, Optional, List, Tuple
 
+from quarry.data.data_packs import configurable_registries
 from quarry.types.data_pack import DataPack
 from quarry.types.namespaced_key import NamespacedKey
-from quarry.types.nbt import TagCompound
+from quarry.types.nbt import TagCompound, TagRoot
 
 
 class DataPacks:
@@ -70,23 +71,52 @@ class DataPacks:
         """Returns all loaded data packs"""
         return list(self.packs.values())
 
-    def get_registry(self, registry: NamespacedKey, *exclude: List[Tuple[NamespacedKey, str]]) \
+    def get_registry(self, registry_id: NamespacedKey, *exclude: List[Tuple[NamespacedKey, str]]) \
             -> Dict[NamespacedKey, Optional[TagCompound]]:
         """
         Computes the given registry with the currently loaded packs.
         Loaded packs with ids in the exclude list will be ignored.
         """
         data = {}
-        print(f"Excluding {exclude}")
 
         for pack in self.load_order:
             excluded = (pack, self.packs[pack].version) in exclude
-            registry = self.packs[pack].contents.get(registry, {})
+            registry = self.packs[pack].contents.get(registry_id, {})
 
             for (key, value) in registry.items():
                 data[key] = None if excluded else value
 
         return data
+
+    def get_nbt_codec(self):
+        """
+        Computes all registries and returns them as a single TagRoot
+        Suitable for the <1.20.5 registry_data packet
+        """
+        contents = {}
+
+        for registry_id in configurable_registries[self.protocol_version]:
+            registry = self.get_registry(registry_id)
+
+            registry_contents = {
+                'type': str(registry_id),
+                'value': []
+            }
+
+            index = 0
+
+            for (key, value) in registry.items():
+                registry_contents['value'].append({
+                    'name': str(key),
+                    'id': index,
+                    'element': value
+                })
+
+                index += 1
+
+            contents[str(registry_id)] = registry_contents
+
+        return TagRoot.from_obj(contents)
 
     def clear_packs(self):
         """Removes all loaded data packs"""

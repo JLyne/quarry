@@ -228,6 +228,8 @@ class TagRoot(TagCompound):
     @classmethod
     def from_obj(cls, obj):
         def parse(value):
+            if isinstance(value, _Tag): # Passthrough any existing tag objects
+                return value
             if isinstance(value, str):
                 return TagString(value)
             if isinstance(value, int):
