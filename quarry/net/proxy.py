@@ -51,7 +51,9 @@ class Upstream(ClientProtocol):
         self.bridge = self.factory.bridge
         self.bridge.upstream = self
 
-    def player_joined(self):
+    # Upstream is ready once in configuration mode
+    def start_configuration(self):
+        self.switch_protocol_mode("configuration")
         self.bridge.upstream_ready()
 
     def connection_lost(self, reason=None):
@@ -228,6 +230,20 @@ class Bridge(PacketDispatcher):
     def packet_downstream_set_compression(self, buff):
         self.upstream.set_compression(buff.unpack_varint())
 
+    # When client completes configuration, switch both sides to play
+    def packet_upstream_finish_configuration(self, buff):
+        buff.discard()
+        self.upstream.send_packet("finish_configuration")
+        self.upstream.switch_protocol_mode("play")
+        self.downstream.switch_protocol_mode("play")
+
+    # When client acknowledges configuration, switch both sides to configuration
+    def packet_upstream_configuration_acknowledged(self, buff):
+        buff.discard()
+        self.upstream.send_packet("configuration_acknowledged")
+        self.upstream.switch_protocol_mode("configuration")
+        self.downstream.switch_protocol_mode("configuration")
+
 
 class Downstream(ServerProtocol):
     bridge = None
@@ -235,8 +251,9 @@ class Downstream(ServerProtocol):
     def setup(self):
         self.bridge = self.factory.bridge_class(self.factory, self)
 
-    def player_joined(self):
-        ServerProtocol.player_joined(self)
+    # Downstream is ready once in configuration mode
+    def start_configuration(self):
+        self.switch_protocol_mode("configuration")
         self.bridge.downstream_ready()
 
     def connection_lost(self, reason=None):
