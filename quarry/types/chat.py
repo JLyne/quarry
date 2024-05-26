@@ -57,6 +57,15 @@ code_by_name, code_by_prop = _load_styles()
 
 @functools.total_ordering
 class Message(object):
+    type_hints = {
+        'text': 'text',
+        'translatable': 'translate',
+        'score': 'score',
+        'selector': 'selector',
+        'keybind': 'keybind',
+        'nbt': 'nbt',
+    }
+
     """
     Represents a Minecraft chat message.
     """
@@ -73,8 +82,7 @@ class Message(object):
 
             self.value = {'text': '', 'extra': extra}
         elif isinstance(value, dict):  # dict, validate and check for children
-            if 'text' not in value:
-                raise TypeError("Object does not contain a text property")
+            self._validate(value)
 
             if 'extra' in value:
                 extra = []
@@ -89,6 +97,27 @@ class Message(object):
             self.value = value
         else:
             raise TypeError("Value is not a string or a list or dictionary")
+
+    @classmethod
+    def _validate(cls, message):
+        type = cls._determine_type(message)
+
+        if cls.type_hints[type] not in message:
+            raise TypeError(f"{type} message does not contain a f{cls.type_hints[type]} property")
+
+    @classmethod
+    def _determine_type(cls, message):
+        if 'type' in message:
+            if message.type not in cls.type_hints:
+                raise TypeError("Unknown message type")
+
+            return message.type
+
+        for (type, field) in cls.type_hints.items():
+            if field in message:
+                return type
+
+        raise TypeError("Unknown message type")
 
     @classmethod
     def from_string(cls, string):
