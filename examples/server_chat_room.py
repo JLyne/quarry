@@ -13,7 +13,6 @@ which does handle signed chat.
 from twisted.internet import reactor
 from quarry.net.server import ServerFactory, ServerProtocol
 from quarry.types.uuid import UUID
-from quarry.data.data_packs import data_packs, dimension_types
 
 
 class ChatRoomProtocol(ServerProtocol):

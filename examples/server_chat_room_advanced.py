@@ -17,7 +17,6 @@ from twisted.internet import reactor
 from quarry.net.server import ServerFactory, ServerProtocol
 from quarry.types.chat import SignedMessage, SignedMessageHeader, SignedMessageBody, Message, LastSeenMessage
 from quarry.types.uuid import UUID
-from quarry.data.data_packs import data_packs, dimension_types
 
 
 class ChatRoomProtocol(ServerProtocol):
@@ -237,9 +236,7 @@ class ChatRoomFactory(ServerFactory):
 
         dimension_count = player.buff_type.pack_varint(1)
         dimension_name = player.buff_type.pack_string("chat")
-        dimension_codec = data_packs[player.protocol_version]
         dimension_type = player.buff_type.pack_string("minecraft:overworld")
-        dimension_nbt = dimension_types[player.protocol_version, dimension_type]
 
         join_game = [
             entity_id,

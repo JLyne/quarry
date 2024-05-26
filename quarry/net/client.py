@@ -5,6 +5,7 @@ from quarry.types.chat import Message
 from quarry.net.protocol import Factory, Protocol, ProtocolError, \
     protocol_modes_inv
 from quarry.net import auth, crypto
+from quarry.types.namespaced_key import NamespacedKey
 
 
 class ClientProtocol(Protocol):
@@ -163,7 +164,7 @@ class ClientProtocol(Protocol):
 
         # Go to configuration mode
         self.send_packet("login_acknowledged")
-        self.switch_protocol_mode("configuration")
+        self.start_configuration()
 
     def packet_login_set_compression(self, buff):
         self.set_compression(buff.unpack_varint())
@@ -173,12 +174,26 @@ class ClientProtocol(Protocol):
 
     # 1.20.5+ negotiate data packs
     def packet_select_known_packs(self, buff):
-        buff.discard()
-        self.send_packet('select_known_packs',
-                         self.buff_type.pack_varint(0))
+        server_packs = []
+
+        # Get server packs
+        for i in range(buff.unpack_varint()):
+            pack_id = NamespacedKey(buff.unpack_string(), buff.unpack_string())
+            version = buff.unpack_string()
+
+            server_packs.append((pack_id, version))
+
+        # Remove client packs the server isn't using
+        for pack in self.data_packs.get_packs():
+            if (pack.id, pack.version) not in server_packs:
+                print(f"Removing unused pack {pack.id}")
+                self.data_packs.remove_data_pack(pack.id)
+
+        self.send_known_data_packs()
 
     # Go to play mode
     def packet_finish_configuration(self, buff):
+        self.data_packs.lock()
         self.send_packet("finish_configuration")
         self.switch_protocol_mode("play")
         self.player_joined()

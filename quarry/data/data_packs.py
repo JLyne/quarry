@@ -1,13 +1,15 @@
 import glob
 import os.path
 import re
+from typing import Dict
 
-from quarry.types.nbt import NBTFile, TagRoot
+from quarry.types.data_pack import DataPack
+from quarry.types.namespaced_key import NamespacedKey
+from quarry.types.nbt import NBTFile
 
 
-def _load():
+def _load() -> Dict[int, DataPack]:
     data_packs = {}
-    dimension_types = {}
     nbt_paths = os.path.abspath(os.path.join(
         os.path.dirname(__file__),
         "data_packs",
@@ -19,18 +21,39 @@ def _load():
 
         protocol_version = int(match.group(1))
         minecraft_version = match.group(2)
-        data_pack = NBTFile.load(nbt_path).root_tag
+        nbt = NBTFile.load(nbt_path).root_tag.body
+        contents = {}
 
-        data_packs[protocol_version] = data_pack
+        for registry_id in configuration_registries:
+            registry = nbt.value.get(str(registry_id), None)
+            values = {}
 
-        for entry in data_pack.body.value.values():
-            if entry.value['type'].value == 'minecraft:dimension_type':
-                for dimension in entry.value['value'].value:
-                    name = dimension.value['name'].value
-                    value = TagRoot.from_body(dimension.value['element'])
-                    dimension_types[protocol_version, name] = value
+            if not registry:
+                continue
 
-    return data_packs, dimension_types
+            for item in registry.value['value'].value:
+                key = NamespacedKey.from_string(item.value.get('name').value)
+                value = item.value.get('element', None)
+                values[key] = value
 
+            contents[registry_id] = values
 
-data_packs, dimension_types = _load()
+        data_packs[protocol_version] = DataPack(NamespacedKey.minecraft('core'), minecraft_version,
+                                                pack_formats[protocol_version], contents)
+
+    return data_packs
+
+pack_formats = {
+    765: 41,
+    766: 45
+}
+
+configuration_registries = [NamespacedKey.minecraft('worldgen/biome'),
+                            NamespacedKey.minecraft('chat_type'),
+                            NamespacedKey.minecraft('trim_pattern'),
+                            NamespacedKey.minecraft('trim_material'),
+                            NamespacedKey.minecraft('wolf_variant'),
+                            NamespacedKey.minecraft('dimension_type'),
+                            NamespacedKey.minecraft('damage_type'),
+                            NamespacedKey.minecraft('banner_pattern')]
+vanilla_data_packs: Dict[int, DataPack] = _load()

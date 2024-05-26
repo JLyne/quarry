@@ -2,6 +2,7 @@ import base64
 import hmac
 import random
 from copy import deepcopy
+from typing import List, Tuple
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
@@ -9,11 +10,12 @@ from cryptography.hazmat.primitives.hashes import SHA256
 from twisted.internet import reactor
 from cached_property import cached_property
 
-from quarry.data.data_packs import data_packs
+from quarry.data.data_packs import vanilla_data_packs, configuration_registries
 from quarry.net.auth import PlayerPublicKey
 from quarry.net.protocol import Factory, Protocol, ProtocolError, \
     protocol_modes
 from quarry.net import auth, crypto
+from quarry.types.namespaced_key import NamespacedKey
 from quarry.types.nbt import TagRoot
 from quarry.types.uuid import UUID
 
@@ -84,6 +86,47 @@ class ServerProtocol(Protocol):
         else:
             Protocol.close(self, reason)
 
+    def start_configuration(self):
+        super().start_configuration()
+        self.configuration()
+
+    def complete_configuration(self):
+        if self.protocol_mode != "configuration":
+            raise ProtocolError("Not in configuration mode")
+
+        self.data_packs.lock()
+
+        if self.protocol_version < 766:  # <1.20.5 just sends registries
+            self.send_registries([])
+            self.send_packet("finish_configuration")  # Tell client to leave configuration mode
+        else:
+            self.send_known_data_packs()
+
+    def send_registries(self, exclude: List[Tuple[NamespacedKey, str]]):
+        if self.protocol_version < 766:  # <1.20.5 sends all registries at once
+            pack = vanilla_data_packs[self.protocol_version]
+            # FIXME: Ignores other data packs currently
+            self.send_packet("registry_data", self.buff_type.pack_nbt(TagRoot.from_body(pack.contents)))  # Required to get past Joining World screen
+
+        else:  # 1.20.5+ Each registry is now sent as a separate packet
+            for registry in configuration_registries:
+                registry_data = self.data_packs.get_registry(registry, *exclude)
+
+                data = [
+                    self.buff_type.pack_string(str(registry)),  # Registry name
+                    self.buff_type.pack_varint(len(registry_data))  # Number of items in registry
+                ]
+
+                for (key, value) in registry_data.items():
+                    data.append(self.buff_type.pack_string(str(key)))  # Item name
+                    data.append(self.buff_type.pack('?', value is not None))  # Whether value is present
+
+                    # Value if present
+                    if value is not None:
+                        data.append(self.buff_type.pack_nbt(TagRoot.from_body(value)))
+
+                self.send_packet("registry_data", *data)
+
     # Callbacks ---------------------------------------------------------------
 
     def connection_lost(self, reason=None):
@@ -111,6 +154,9 @@ class ServerProtocol(Protocol):
         Protocol.player_left(self)
 
         self.logger.info("%s has left." % self.display_name)
+
+    def configuration(self):
+        self.complete_configuration()
 
     # Packet handlers ---------------------------------------------------------
 
@@ -281,58 +327,23 @@ class ServerProtocol(Protocol):
 
     # Entering configuration mode
     def packet_login_acknowledged(self, buff):
-        self.switch_protocol_mode("configuration")
-
-        if self.protocol_version >= 766:  # 1.20.5+ need to negotiate data packs before sending registry data
-            self.send_packet('select_known_packs',
-                             self.buff_type.pack_varint(1),
-                             self.buff_type.pack_string('minecraft'),
-                             self.buff_type.pack_string('core'),
-                             self.buff_type.pack_string('1.20.5'))  # FIXME:
-
-        else:
-            pack = data_packs[self.protocol_version]
-            self.send_packet("registry_data", self.buff_type.pack_nbt(pack))  # Required to get past Joining World screen
-
-            self.send_packet("finish_configuration")  # Tell client to leave configuration mode
-
         buff.discard()
+        self.start_configuration()
 
     # 1.20.5+ need to negotiate data packs before sending registry data and leaving configuration mode
     def packet_select_known_packs(self, buff):
-        has_vanilla = False
+        client_packs = []
 
-        # Don't send vanilla datapack values if the client already has it
+        # Packs listed here should be excluded from registry data
         for i in range(buff.unpack_varint()):
-            namespace = buff.unpack_string()
-            id = buff.unpack_string()
+            pack_id = NamespacedKey(buff.unpack_string(), buff.unpack_string())
             version = buff.unpack_string()
+            client_packs.append((pack_id, version))
 
-            if namespace == "minecraft" and id == "core":
-                has_vanilla = True
-                break
-
-        # Each registry is now sent as a separate packet
-        for registry in data_packs[self.protocol_version].body.value.values():
-            data = [
-                self.buff_type.pack_string(registry.value['type'].value),  # Registry name
-                self.buff_type.pack_varint(len(registry.value['value'].value))  # Number of items in registry
-            ]
-
-            for item in registry.value['value'].value:
-                value = item.value.get('element', None)
-
-                data.append(self.buff_type.pack_string(item.value.get('name').value))  # Item name
-                data.append(self.buff_type.pack('?', value is not None and has_vanilla is False))  # Whether value is present
-
-                # Value if present
-                if value is not None and has_vanilla is False:
-                    data.append(self.buff_type.pack_nbt(TagRoot.from_body(value)))
-
-            self.send_packet("registry_data", *data)
-
+        print(f"Client data packs: {client_packs}")
         buff.discard()
 
+        self.send_registries(client_packs)
         self.send_packet("finish_configuration")  # Tell client to leave configuration mode
 
     # Leaving configuration mode

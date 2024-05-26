@@ -1,10 +1,15 @@
 import logging
+from typing import List
+
 from twisted.internet import protocol
 
 from quarry.data import packets
+from quarry.data.data_packs import vanilla_data_packs
+from quarry.net.data_packs import DataPacks
 from quarry.types.buffer import BufferUnderrun, buff_types
 from quarry.net.crypto import Cipher
 from quarry.net.ticker import Ticker
+from quarry.types.data_pack import DataPack
 
 protocol_modes = {
     0: 'init',
@@ -47,6 +52,10 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
 
     #: The IP address of the remote.
     remote_addr = None
+
+    #: A reference to a :class:`~quarry.net.data_packs.DataPacks` instance.
+    # Created once the configuration phase is entered
+    data_packs = None
 
     recv_direction = None
     send_direction = None
@@ -140,6 +149,34 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
             prefix,
             self.protocol_mode,
             name))
+
+    def start_configuration(self):
+        self.switch_protocol_mode("configuration")
+        self.data_packs = DataPacks(self.protocol_version)
+
+        self.data_packs.add_data_pack(vanilla_data_packs[self.protocol_version])  # Add vanilla data pack
+
+        # Add factory data_packs if compatible
+        # These will be removed again on the client if the server doesn't have them
+        for pack in self.factory.data_packs:
+            if pack.force_load or pack.is_compatible(self.protocol_version):
+                self.data_packs.add_data_pack(pack)
+
+    def send_known_data_packs(self):
+        if self.protocol_version < 766:
+            return
+
+        packs = self.data_packs.get_packs()
+        data = [
+            self.buff_type.pack_varint(len(packs))
+        ]
+
+        for pack in self.data_packs.get_packs():
+            data.append(self.buff_type.pack_string(pack.id.namespace))
+            data.append(self.buff_type.pack_string(pack.id.key))
+            data.append(self.buff_type.pack_string(pack.version))
+
+        self.send_packet('select_known_packs', *data)
 
     # General callbacks -------------------------------------------------------
 
@@ -311,6 +348,10 @@ class Factory(protocol.Factory, object):
     log_level = logging.INFO
     connection_timeout = 30
     force_protocol_version = None
+
+    # For servers: List of datapacks to apply by default for all players
+    # For clients: List of available datapacks to apply if the server uses them
+    data_packs: List[DataPack] = []
 
     minecraft_versions = packets.minecraft_versions
 
