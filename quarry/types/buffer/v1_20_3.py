@@ -1171,3 +1171,36 @@ class Buffer1_20_3:
         header = SignedMessageHeader(uuid, previous_signature)
         body = SignedMessageBody(message, timestamp, salt, decorated_message, last_seen)
         return SignedMessage(header, signature, 760, body, unsigned_content)
+
+    @classmethod
+    def pack_game_profile(cls, value):
+        name = value.get('name', None)
+        uuid = value.get('uuid', None)
+        properties = value.get('properties', [])
+
+        data = cls.pack_optional(cls.pack_string, name) + \
+               cls.pack_optional(cls.pack_uuid, uuid) + \
+               cls.pack_varint(len(properties))
+
+        for property in properties:
+            signature = value.get('signature', None)
+
+            data += cls.pack_string(property['name']) + \
+                    cls.pack_string(property['value']) + \
+                    cls.pack_optional(cls.pack_byte_array, signature)
+
+        return data
+
+    def unpack_game_profile(self):
+        def unpack_property():
+            return {
+                'name': self.unpack_string(),
+                'value': self.unpack_string(),
+                'signature': self.unpack_optional(self.unpack_byte_array)
+            }
+
+        return {
+            'name': self.unpack_optional(self.unpack_string),
+            'uuid': self.unpack_optional(self.unpack_uuid),
+            'properties': [unpack_property() for _ in range(self.unpack_varint())]
+        }

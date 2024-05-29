@@ -1,7 +1,41 @@
+from quarry.types.buffer.item.v1_20_5 import ItemBuffer1_20_5
 from quarry.types.buffer.v1_20_3 import Buffer1_20_3
 
 
 class Buffer1_20_5(Buffer1_20_3):
+    items = ItemBuffer1_20_5
+
+    def __init__(self, data=None):
+        super(Buffer1_20_5, self).__init__(data)
+        self.items = ItemBuffer1_20_5(self)
+
+    # Slot --------------------------------------------------------------------
+
+    @classmethod
+    def pack_slot(cls, item=None, count=1, structured_data=None):
+        """
+        Packs a slot.
+        """
+        if item is None:
+            return cls.items.pack_item(None)
+
+        if structured_data is None:
+            structured_data = {}
+
+        return cls.items.pack_item({
+            'item': item,
+            'count': count,
+            'structured_data': structured_data,
+        })
+
+    def unpack_slot(self):
+        """
+        Unpacks a slot.
+        """
+        return self.items.unpack_item()
+
+    # Entity Metadata ----------------------------------------------------------
+
     @classmethod
     def pack_entity_metadata(cls, metadata):
         """
@@ -96,3 +130,6 @@ class Buffer1_20_5(Buffer1_20_3):
             elif ty == 30: val = (self.unpack('f'), self.unpack('f'), self.unpack('f'), self.unpack('f'))  # Quaternion
             else: raise ValueError("Unknown entity metadata type: %d" % ty)
             metadata[ty, key] = val
+
+
+Buffer1_20_5.items.buffer = Buffer1_20_5
