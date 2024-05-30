@@ -1,10 +1,11 @@
 from collections import deque
+from copy import deepcopy
 from typing import Dict, Deque, Optional, List, Tuple
 
 from quarry.data.data_packs import configurable_registries
 from quarry.types.data_pack import DataPack
 from quarry.types.namespaced_key import NamespacedKey
-from quarry.types.nbt import TagCompound, TagRoot
+from quarry.types.nbt import TagRoot
 
 
 class DataPacks:
@@ -13,6 +14,7 @@ class DataPacks:
         self.protocol_version = protocol_version
         self.packs: Dict[NamespacedKey, DataPack] = {}
         self.load_order: Deque[NamespacedKey] = deque()
+        self.final_registries = {}
 
     #
     def add_data_pack(self, pack: DataPack):
@@ -72,19 +74,38 @@ class DataPacks:
         return list(self.packs.values())
 
     def get_registry(self, registry_id: NamespacedKey, *exclude: List[Tuple[NamespacedKey, str]]) \
-            -> Dict[NamespacedKey, Optional[TagCompound]]:
+            -> Dict[NamespacedKey, Optional[Dict]]:
         """
         Computes the given registry with the currently loaded packs.
         Loaded packs with ids in the exclude list will be ignored.
         """
+        if not exclude and registry_id in self.final_registries:
+            return self.final_registries[registry_id]
+
         data = {}
+        id = 0
 
         for pack in self.load_order:
             excluded = (pack, self.packs[pack].version) in exclude
             registry = self.packs[pack].contents.get(registry_id, {})
 
             for (key, value) in registry.items():
-                data[key] = None if excluded else value
+                old_id = None
+
+                if data.get(key) is not None:
+                    old_id = data[key].get('id', None)
+
+                data[key] = None if excluded else deepcopy(value)
+
+                # Keep existing id if overriding previous value
+                if old_id is not None:
+                    if not excluded:
+                        data[key]['id'] = old_id
+                else:
+                    if not excluded:
+                        data[key]['id'] = id
+
+                    id += 1
 
         return data
 
@@ -130,6 +151,9 @@ class DataPacks:
         Prevents further modification of data packs.
         Should be called when leaving configuration mode.
         """
+        for registry in configurable_registries[self.protocol_version]:
+            self.final_registries[registry] = self.get_registry(registry)
+
         self.locked = True
 
     def _check_locked(self):

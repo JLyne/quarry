@@ -121,7 +121,7 @@ class ServerProtocol(Protocol):
 
                     # Value if present
                     if value is not None:
-                        data.append(self.buff_type.pack_nbt(TagRoot.from_body(value)))
+                        data.append(self.buff_type.pack_nbt(TagRoot.from_obj(value)))
 
                 self.send_packet("registry_data", *data)
 

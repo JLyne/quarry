@@ -21,20 +21,19 @@ def _load() -> Dict[int, DataPack]:
 
         protocol_version = int(match.group(1))
         minecraft_version = match.group(2)
-        nbt = NBTFile.load(nbt_path).root_tag.body
+        pack = NBTFile.load(nbt_path).root_tag.body.to_obj()
         contents = {}
 
         for registry_id in configurable_registries[protocol_version]:
-            registry = nbt.value.get(str(registry_id), None)
+            registry = pack.get(str(registry_id), None)
             values = {}
 
             if not registry:
                 continue
 
-            for item in registry.value['value'].value:
-                key = NamespacedKey.from_string(item.value.get('name').value)
-                value = item.value.get('element', None)
-                values[key] = value
+            for item in registry['value']:
+                key = NamespacedKey.from_string(item.get('name'))
+                values[key] = item.get('element', None)
 
             contents[registry_id] = values
 

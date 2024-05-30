@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from typing import Dict, Tuple, Union
 
 from quarry.types.namespaced_key import NamespacedKey
-from quarry.types.nbt import TagCompound
 
 
 @dataclass(frozen=True)
@@ -10,7 +9,7 @@ class DataPack:
     id: NamespacedKey
     version: str
     format: Union[int, Tuple[int, int]]
-    contents: Dict[NamespacedKey, Dict[NamespacedKey, TagCompound]] = field(repr=False)
+    contents: Dict[NamespacedKey, Dict[NamespacedKey, Dict]] = field(repr=False)
     force_load: bool = False
 
     def is_compatible(self, protocol_version: int):
