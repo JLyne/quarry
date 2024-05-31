@@ -731,7 +731,8 @@ class ItemBuffer1_20_5:
             if isinstance(page, str):
                 data += cls.buffer.pack_string(page) + cls.buffer.pack('?', False)
             else:
-                data += cls.buffer.pack_string(page['raw']) + cls.buffer.pack_optional(cls.buffer.pack_string, page['filtered'])
+                data += (cls.buffer.pack_string(page['raw']) +
+                         cls.buffer.pack_optional(cls.buffer.pack_string, page.get('filtered', None)))
 
         return data
 
@@ -746,11 +747,11 @@ class ItemBuffer1_20_5:
         title = value['title']
         pages = value.get('pages', [])
 
-        if isinstance(title, Message):
-            data = cls.buffer.pack_chat(title) + cls.buffer.pack('?', False)
+        if isinstance(title, str):
+            data = cls.buffer.pack_string(title) + cls.buffer.pack('?', False)
         else:
-            data = cls.buffer.pack_chat(title['raw']) + \
-                    cls.buffer.pack_optional(cls.buffer.pack_chat, title.get('filtered', None))
+            data = cls.buffer.pack_string(title['raw']) + \
+                    cls.buffer.pack_optional(cls.buffer.pack_string, title.get('filtered', None))
 
         data += cls.buffer.pack_string(value['author']) + \
             cls.buffer.pack_varint(value['generation']) + \
