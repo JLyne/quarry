@@ -88,34 +88,10 @@ class ItemBuffer1_20_5:
         if value is None:
             return cls.buffer.pack_varint(0)
 
-        values = 0
-        markers = 0
-
-        for (data_key, data_value) in value['structured_data'].items():
-            if data_value is not None:
-                values += 1
-            else:
-                markers += 1
-
-
         data = cls.buffer.pack_varint(value['count']) + \
             cls.buffer.pack_varint(
                 cls.buffer.registry.encode('minecraft:item', value['item'])
-            ) + \
-            cls.buffer.pack_varint(values) + \
-            cls.buffer.pack_varint(markers)
-
-        # Structured data with values
-        for (data_key, data_value) in value['structured_data'].items():
-            component_handler = cls.component_handlers[data_key][0](cls)
-
-            if data_value is not None:
-                data += cls.buffer.pack_varint(cls.component_types.index(data_key)) + component_handler(data_value)
-
-        # Structured data without values (markers)
-        for (data_key, data_value) in value['structured_data'].items():
-            if data_value is None:
-                data += cls.buffer.pack_varint(cls.component_types.index(data_key))
+            ) + cls.pack_structured_data(value.get('structured_data', {}))
 
         return data
 
@@ -126,6 +102,42 @@ class ItemBuffer1_20_5:
             return None
 
         item = self.buffer.registry.decode('minecraft:item', self.buffer.unpack_varint())
+
+        return {
+            'count': count,
+            'item': item,
+            'structured_data': self.unpack_structured_data()
+        }
+
+    @classmethod
+    def pack_structured_data(cls, value):
+        values = 0
+        markers = 0
+
+        for (data_key, data_value) in value.items():
+            if data_value is not None:
+                values += 1
+            else:
+                markers += 1
+
+        data = cls.buffer.pack_varint(values) + \
+            cls.buffer.pack_varint(markers)
+
+        # Structured data with values
+        for (data_key, data_value) in value.items():
+            component_handler = cls.component_handlers[data_key][0](cls)
+
+            if data_value is not None:
+                data += cls.buffer.pack_varint(cls.component_types.index(data_key)) + component_handler(data_value)
+
+        # Structured data without values (markers)
+        for (data_key, data_value) in value.items():
+            if data_value is None:
+                data += cls.buffer.pack_varint(cls.component_types.index(data_key))
+
+        return data
+
+    def unpack_structured_data(self):
         values = self.buffer.unpack_varint()
         markers = self.buffer.unpack_varint()
         structured_data = {
@@ -140,11 +152,7 @@ class ItemBuffer1_20_5:
             key = self.component_types[self.buffer.unpack_varint()]
             structured_data[key] = None
 
-        return {
-            'count': count,
-            'item': item,
-            'structured_data': structured_data
-        }
+        return structured_data
 
     @classmethod
     def pack_item_array(cls, value):
@@ -354,7 +362,7 @@ class ItemBuffer1_20_5:
             'name': self.buffer.unpack_string(),
             'amount': self.buffer.unpack('d'),
             'operation': attribute_operations[self.buffer.unpack_varint()],
-            'attribute_slot': attribute_slots[self.buffer.unpack_varint()],
+            'slot': attribute_slots[self.buffer.unpack_varint()],
         }
 
     # Dyed Color ------------------------------------------------------------------
