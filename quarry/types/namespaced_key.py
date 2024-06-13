@@ -1,8 +1,8 @@
 import re
 from dataclasses import dataclass
 
-valid_namespace = re.compile("[a-z._-]+")
-valid_key = re.compile("[a-z._\-/]+")
+valid_namespace = re.compile("[a-z0-9._-]+")
+valid_key = re.compile("[a-z0-9._\-/]+")
 
 
 @dataclass(frozen=True)
@@ -12,10 +12,10 @@ class NamespacedKey:
 
     def __post_init__(self):
         if not valid_namespace.match(self.namespace):
-            raise TypeError("Invalid namespace, must match [a-z._-]+")
+            raise TypeError("Invalid namespace, must match [a-z0-9._-]+")
 
         if not valid_key.match(self.key):
-            raise TypeError("Invalid key, must match [a-z._-]+")
+            raise TypeError(f"Invalid key, must match [a-z0-9._-]+: {self.key}")
 
     @classmethod
     def minecraft(cls, key: str):
