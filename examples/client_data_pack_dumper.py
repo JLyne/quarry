@@ -4,13 +4,17 @@ Dumps the data pack info from the "join_game" packet to a file.
 
 from __future__ import print_function
 from twisted.internet import reactor, defer
-from quarry.types.nbt import NBTFile, alt_repr
+from quarry.types.nbt import NBTFile, alt_repr, TagRoot
 from quarry.net.client import ClientFactory, ClientProtocol
 from quarry.net.auth import ProfileCLI
 
 
 class DataPackDumperProtocol(ClientProtocol):
     result = {}
+
+    def start_configuration(self):
+        super().start_configuration()
+        self.data_packs.clear_packs()
 
     def packet_registry_data(self, buff):
         if self.protocol_version >= 766:
@@ -48,6 +52,15 @@ class DataPackDumperProtocol(ClientProtocol):
             reactor.stop()
 
     def packet_join_game(self, buff):
+        if self.protocol_version >= 766:
+            nbt = TagRoot.from_obj(self.result)
+
+            if self.factory.output_path:
+                result = NBTFile(nbt)
+                result.save(self.factory.output_path)
+            else:
+                print(alt_repr(nbt))
+
         buff.discard()
         reactor.stop()
 
