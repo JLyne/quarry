@@ -42,6 +42,7 @@ class ServerProtocol(Protocol):
     display_name = None
     display_name_confirmed = False
     public_key_data: PlayerPublicKey = None
+    transferred = False
 
     # the hostname/port that the client claims it connected to. Useful for
     # implementing virtual hosting.
@@ -182,18 +183,26 @@ class ServerProtocol(Protocol):
         except ValueError:
             raise ProtocolError("Unknown connection intent")
 
-        if p_intent == ClientIntent.LOGIN:
+        if p_intent == ClientIntent.TRANSFER and not self.factory.accept_transfers:
+            self.close(Message({'translate': 'multiplayer.disconnect.transfers_disabled'}))
+            return
+
+        if p_intent == ClientIntent.LOGIN or p_intent == ClientIntent.TRANSFER:
             self.switch_protocol_mode("login")
+            self.transferred = p_intent == ClientIntent.TRANSFER
 
             if self.factory.force_protocol_version is not None:
                 if p_protocol_version != self.factory.force_protocol_version:
                     self.close("Wrong protocol version")
+                    return
             else:
                 if p_protocol_version not in self.factory.minecraft_versions:
                     self.close("Unknown protocol version")
+                    return
 
             if len(self.factory.players) >= self.factory.max_players:
                 self.close("Server is full")
+                return
             else:
                 self.factory.players.add(self)
 
@@ -415,6 +424,7 @@ class ServerFactory(Factory):
     online_mode = True
     enforce_secure_profile = False
     prevent_proxy_connections = True
+    accept_transfers = False
     bungeecord_forwarding = False
     velocity_forwarding = False
     velocity_forwarding_secret = None
