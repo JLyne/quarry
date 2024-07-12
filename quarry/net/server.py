@@ -13,9 +13,9 @@ from cached_property import cached_property
 
 from quarry.data.data_packs import configurable_registries
 from quarry.net.auth import PlayerPublicKey
-from quarry.net.protocol import Factory, Protocol, ProtocolError, \
-    protocol_modes
+from quarry.net.protocol import Factory, Protocol, ProtocolError, ClientIntent
 from quarry.net import auth, crypto
+from quarry.types.chat import Message
 from quarry.types.namespaced_key import NamespacedKey
 from quarry.types.nbt import TagRoot
 from quarry.types.uuid import UUID
@@ -176,12 +176,15 @@ class ServerProtocol(Protocol):
         p_protocol_version = buff.unpack_varint()
         p_connect_host = buff.unpack_string()
         p_connect_port = buff.unpack("H")
-        p_protocol_mode = buff.unpack_varint()
 
-        mode = protocol_modes.get(p_protocol_mode, p_protocol_mode)
-        self.switch_protocol_mode(mode)
+        try:
+            p_intent = ClientIntent(buff.unpack_varint())
+        except ValueError:
+            raise ProtocolError("Unknown connection intent")
 
-        if mode == "login":
+        if p_intent == ClientIntent.LOGIN:
+            self.switch_protocol_mode("login")
+
             if self.factory.force_protocol_version is not None:
                 if p_protocol_version != self.factory.force_protocol_version:
                     self.close("Wrong protocol version")

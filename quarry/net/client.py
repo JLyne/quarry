@@ -4,8 +4,7 @@ from twisted.internet import reactor, protocol, defer
 from twisted.python import failure
 
 from quarry.types.chat import Message
-from quarry.net.protocol import Factory, Protocol, ProtocolError, \
-    protocol_modes_inv
+from quarry.net.protocol import Factory, Protocol, ProtocolError, ClientIntent
 from quarry.net import auth, crypto
 from quarry.types.namespaced_key import NamespacedKey
 
@@ -26,7 +25,7 @@ class ClientProtocol(Protocol):
     login_state = LoginState.CONNECTING
 
     # Convenience functions ---------------------------------------------------
-    def send_handshake(self, mode):
+    def send_handshake(self, intent: ClientIntent):
         # Send handshake
         addr = self.transport.connector.getDestination()
         self.send_packet(
@@ -34,19 +33,22 @@ class ClientProtocol(Protocol):
             self.buff_type.pack_varint(self.protocol_version) +
             self.buff_type.pack_string(addr.host) +
             self.buff_type.pack('H', addr.port) +
-            self.buff_type.pack_varint(
-                protocol_modes_inv[mode]))
+            self.buff_type.pack_varint(intent.value))
 
         # Switch buff type
         self.buff_type = self.factory.get_buff_type(self.protocol_version)
-        self.switch_protocol_mode(mode)
+
+        if intent == ClientIntent.STATUS:
+            self.switch_protocol_mode("status")
+        elif intent == ClientIntent.LOGIN or ClientIntent.TRANSFER:
+            self.switch_protocol_mode("login")
 
     def send_status_request(self):
-        self.send_handshake("status")
+        self.send_handshake(ClientIntent.STATUS)
         self.send_packet("status_request")
 
     def send_login_start(self):
-        self.send_handshake("login")
+        self.send_handshake(ClientIntent.LOGIN)
 
         # TODO: Implement signature sending
         self.send_packet("login_start",

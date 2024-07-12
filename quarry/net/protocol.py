@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from typing import List
 
 from twisted.internet import protocol
@@ -11,13 +12,11 @@ from quarry.net.crypto import Cipher
 from quarry.net.ticker import Ticker
 from quarry.types.data_pack import DataPack
 
-protocol_modes = {
-    0: 'init',
-    1: 'status',
-    2: 'login',
-    3: 'play'
-}
-protocol_modes_inv = dict(((v, k) for k, v in protocol_modes.items()))
+
+class ClientIntent(Enum):
+    STATUS = 1
+    LOGIN = 2
+    TRANSFER = 3
 
 
 class ProtocolError(Exception):
