@@ -55,6 +55,31 @@ class ClientProtocol(Protocol):
                          self.buff_type.pack_string(self.factory.profile.display_name),
                          self.buff_type.pack_uuid(self.factory.profile.uuid))
 
+    def enable_encryption(self):
+        if self.login_state != LoginState.AUTHORIZING:
+            raise ProtocolError(f"Can't switch to {LoginState.ENCRYPTING} from {self.login_state}")
+
+        self.login_state = LoginState.ENCRYPTING
+
+        # Send encryption response
+        p_shared_secret = crypto.encrypt_secret(
+            self.public_key,
+            self.shared_secret)
+        p_verify_token = crypto.encrypt_secret(
+            self.public_key,
+            self.verify_token)
+
+        pack_array = lambda d: self.buff_type.pack_varint(len(d), max_bits=16) + d
+
+        self.send_packet(
+            "login_encryption_response",
+            pack_array(p_shared_secret) +
+            pack_array(p_verify_token))
+
+        # Enable encryption
+        self.cipher.enable(self.shared_secret)
+        self.logger.debug("Encryption enabled")
+
     # Callbacks ---------------------------------------------------------------
 
     @defer.inlineCallbacks
@@ -81,29 +106,7 @@ class ClientProtocol(Protocol):
         this method does not indicate that the server accepted our session; in
         this case :meth:`player_joined` is called.
         """
-        if self.login_state != LoginState.AUTHORIZING:
-            raise ProtocolError(f"Can't switch to {LoginState.ENCRYPTING} from {self.login_state}")
-
-        self.login_state = LoginState.ENCRYPTING
-
-        # Send encryption response
-        p_shared_secret = crypto.encrypt_secret(
-            self.public_key,
-            self.shared_secret)
-        p_verify_token = crypto.encrypt_secret(
-            self.public_key,
-            self.verify_token)
-
-        pack_array = lambda d: self.buff_type.pack_varint(len(d), max_bits=16) + d
-
-        self.send_packet(
-            "login_encryption_response",
-            pack_array(p_shared_secret) +
-            pack_array(p_verify_token))
-
-        # Enable encryption
-        self.cipher.enable(self.shared_secret)
-        self.logger.debug("Encryption enabled")
+        self.enable_encryption()
 
     def player_joined(self):
         """
@@ -159,6 +162,7 @@ class ClientProtocol(Protocol):
 
         p_public_key = unpack_array(buff)
         p_verify_token = unpack_array(buff)
+        p_should_auth = buff.unpack_bool()
 
         if not self.factory.profile.online:
             raise ProtocolError("Can't log into online-mode server while using"
@@ -175,8 +179,11 @@ class ClientProtocol(Protocol):
             p_public_key)
 
         # do auth
-        deferred = self.factory.profile.join(digest)
-        deferred.addCallbacks(self.auth_ok, self.auth_failed)
+        if p_should_auth:
+            deferred = self.factory.profile.join(digest)
+            deferred.addCallbacks(self.auth_ok, self.auth_failed)
+        else:
+            self.enable_encryption()
 
     def packet_login_success(self, buff):
         if self.login_state != LoginState.AUTHORIZING and self.login_state != LoginState.ENCRYPTING:
