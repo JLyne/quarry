@@ -1,3 +1,5 @@
+from enum import Enum
+
 from twisted.internet import reactor, protocol, defer
 from twisted.python import failure
 
@@ -8,11 +10,20 @@ from quarry.net import auth, crypto
 from quarry.types.namespaced_key import NamespacedKey
 
 
+class LoginState(Enum):
+    CONNECTING = 0
+    AUTHORIZING = 1
+    ENCRYPTING = 2
+    JOINING = 3
+
+
 class ClientProtocol(Protocol):
     """This class represents a connection to a server"""
 
     recv_direction = "downstream"
     send_direction = "upstream"
+
+    login_state = LoginState.CONNECTING
 
     # Convenience functions ---------------------------------------------------
     def send_handshake(self, mode):
@@ -68,6 +79,10 @@ class ClientProtocol(Protocol):
         this method does not indicate that the server accepted our session; in
         this case :meth:`player_joined` is called.
         """
+        if self.login_state != LoginState.AUTHORIZING:
+            raise ProtocolError(f"Can't switch to {LoginState.ENCRYPTING} from {self.login_state}")
+
+        self.login_state = LoginState.ENCRYPTING
 
         # Send encryption response
         p_shared_secret = crypto.encrypt_secret(
@@ -131,6 +146,11 @@ class ClientProtocol(Protocol):
         self.close()
 
     def packet_login_encryption_request(self, buff):
+        if self.login_state != LoginState.CONNECTING:
+            raise ProtocolError(f"Can't switch to {LoginState.AUTHORIZING} from {self.login_state}")
+
+        self.login_state = LoginState.AUTHORIZING
+
         p_server_id = buff.unpack_string()
 
         unpack_array = lambda b: b.read(b.unpack_varint(max_bits=16))
@@ -157,6 +177,11 @@ class ClientProtocol(Protocol):
         deferred.addCallbacks(self.auth_ok, self.auth_failed)
 
     def packet_login_success(self, buff):
+        if self.login_state != LoginState.AUTHORIZING and self.login_state != LoginState.ENCRYPTING:
+            raise ProtocolError(f"Can't switch to {LoginState.JOINING} from {self.login_state}")
+
+        self.login_state = LoginState.JOINING
+
         p_uuid = buff.unpack_uuid()
         p_display_name = buff.unpack_string()
 

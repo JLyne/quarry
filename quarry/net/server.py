@@ -2,6 +2,7 @@ import base64
 import hmac
 import random
 from copy import deepcopy
+from enum import Enum
 from typing import List, Tuple
 
 from cryptography.exceptions import InvalidSignature
@@ -18,6 +19,17 @@ from quarry.net import auth, crypto
 from quarry.types.namespaced_key import NamespacedKey
 from quarry.types.nbt import TagRoot
 from quarry.types.uuid import UUID
+
+
+class LoginState(Enum):
+    HELLO = 0  # Login not started
+    KEY = 1  # Awaiting online mode encryption response
+    AUTHENTICATING = 2  # Authenticating user with mojang
+    NEGOTIATING = 3  # Waiting for velocity plugin message
+    VERIFYING = 4  # Compression etc
+    WAITING_FOR_DUPE_DISCONNECT = 5  # Currently unused
+    PROTOCOL_SWITCHING = 6  # Waiting for login acknowledgement
+    ACCEPTED = 7  # Done
 
 
 class ServerProtocol(Protocol):
@@ -38,7 +50,7 @@ class ServerProtocol(Protocol):
 
     # used to stop people breaking the login process
     # by sending packets out-of-order or duplicated
-    login_expecting = 0
+    login_state = LoginState.HELLO
 
     def __init__(self, factory, remote_addr):
         Protocol.__init__(self, factory, remote_addr)
@@ -69,6 +81,8 @@ class ServerProtocol(Protocol):
                 self.buff_type.pack_uuid(self.uuid) +
                 self.buff_type.pack_string(self.display_name) +
                 self.buff_type.pack_varint(0))  # Profile properties
+
+        self.login_state = LoginState.PROTOCOL_SWITCHING
 
     def close(self, reason=None):
         """Closes the connection"""
@@ -180,15 +194,15 @@ class ServerProtocol(Protocol):
             else:
                 self.factory.players.add(self)
 
-        if self.factory.bungeecord_forwarding is True:
-            # Bungeecord ip forwarding, ip/uuid is included in host string separated by \00s
-            split_host = str.split(p_connect_host, "\00")
+            if self.factory.bungeecord_forwarding is True:
+                # Bungeecord ip forwarding, ip/uuid is included in host string separated by \00s
+                split_host = str.split(p_connect_host, "\00")
 
-            if len(split_host) < 3:
-                raise ProtocolError("Invalid bungeecord forwarding data")
+                if len(split_host) < 3:
+                    raise ProtocolError("Invalid bungeecord forwarding data")
 
-            self.connect_host = split_host[1]
-            self.uuid = UUID.from_hex(split_host[2])
+                self.connect_host = split_host[1]
+                self.uuid = UUID.from_hex(split_host[2])
 
         self.protocol_version = p_protocol_version
         self.buff_type = self.factory.get_buff_type(self.protocol_version)
@@ -196,13 +210,13 @@ class ServerProtocol(Protocol):
         self.connect_port = p_connect_port
 
     def packet_login_start(self, buff):
-        if self.login_expecting != 0:
-            raise ProtocolError("Out-of-order login")
+        if self.login_state != LoginState.HELLO:
+            raise ProtocolError("Unexpected hello packet")
 
         self.display_name = buff.unpack_string()
 
         if self.factory.online_mode:
-            self.login_expecting = 1
+            self.login_state = LoginState.KEY
 
             # send encryption request
             pack_array = lambda a: self.buff_type.pack_varint(len(a), max_bits=16) + a
@@ -222,13 +236,13 @@ class ServerProtocol(Protocol):
                     pack_array(self.verify_token))
 
         elif self.factory.velocity_forwarding:
-            self.login_expecting = 2
+            self.login_state = LoginState.NEGOTIATING
             self.send_packet("login_plugin_request",
                              self.buff_type.pack_varint(self.velocity_message_id),
                              self.buff_type.pack_string("velocity:player_info"),
                              b'')
         else:
-            self.login_expecting = None
+            self.login_state = LoginState.VERIFYING
             self.display_name_confirmed = True
             self.uuid = UUID.from_offline_player(self.display_name)
             self.send_login_success()
@@ -236,7 +250,7 @@ class ServerProtocol(Protocol):
         buff.discard()
 
     def packet_login_plugin_response(self, buff):
-        if self.login_expecting != 2 or self.protocol_mode != "login":
+        if self.login_state != LoginState.NEGOTIATING:
             raise ProtocolError("Out-of-order login")
 
         message_id = buff.unpack_varint()
@@ -268,13 +282,13 @@ class ServerProtocol(Protocol):
 
         buff.discard()  # Don't care about the rest
 
-        self.login_expecting = None
+        self.login_state = LoginState.VERIFYING
         self.display_name_confirmed = True
         self.send_login_success()
 
     def packet_login_encryption_response(self, buff):
-        if self.login_expecting != 1:
-            raise ProtocolError("Out-of-order login")
+        if self.login_state != LoginState.KEY:
+            raise ProtocolError("Unexpected key packet")
 
         unpack_array = lambda b: b.read(b.unpack_varint(max_bits=16))
 
@@ -300,8 +314,6 @@ class ServerProtocol(Protocol):
             if verify_token != self.verify_token:
                 raise ProtocolError("Verify token incorrect")
 
-        self.login_expecting = None
-
         # enable encryption
         self.cipher.enable(shared_secret)
         self.logger.debug("Encryption enabled")
@@ -313,6 +325,7 @@ class ServerProtocol(Protocol):
             self.factory.public_key)
 
         # do auth
+        self.login_state = LoginState.AUTHENTICATING
         remote_host = None
         if self.factory.prevent_proxy_connections:
             remote_host = self.remote_addr.host
@@ -325,7 +338,11 @@ class ServerProtocol(Protocol):
 
     # Entering configuration mode
     def packet_login_acknowledged(self, buff):
+        if self.login_state != LoginState.PROTOCOL_SWITCHING:
+            raise ProtocolError("Unexpected login acknowledgement packet")
+
         buff.discard()
+        self.login_state = LoginState.ACCEPTED
         self.start_configuration()
 
     # 1.20.5+ need to negotiate data packs before sending registry data and leaving configuration mode
