@@ -112,7 +112,7 @@ class Buffer1_20_5(Buffer1_20_3):
             elif ty == 12: val = self.unpack_direction()
             elif ty == 13: val = self.unpack_optional(self.unpack_uuid)
             elif ty == 14: val = self.unpack_block()
-            elif ty == 15: val = self.unpack_optional(self.unpack_block())
+            elif ty == 15: val = self.unpack_optional(self.unpack_block)
             elif ty == 16: val = self.unpack_nbt()
             elif ty == 17: val = self.unpack_particle()
             elif ty == 18: raise ValueError("TODO")  # Particle array

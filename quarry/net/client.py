@@ -162,7 +162,7 @@ class ClientProtocol(Protocol):
 
         p_public_key = unpack_array(buff)
         p_verify_token = unpack_array(buff)
-        p_should_auth = buff.unpack_bool()
+        p_should_auth = buff.unpack('?')
 
         if not self.factory.profile.online:
             raise ProtocolError("Can't log into online-mode server while using"
