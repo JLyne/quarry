@@ -14,6 +14,16 @@ firework_shapes = [
     "creeper",
     "burst"
 ]
+rarities = [
+    "common",
+    "uncommon",
+    "rare",
+    "epic"
+]
+map_post_processing = [
+    "lock",
+    "scale"
+]
 
 
 class ItemBuffer1_20_5:
@@ -28,7 +38,7 @@ class ItemBuffer1_20_5:
         'custom_name': (lambda cls: cls.buffer.pack_chat, lambda self: self.buff.unpack_chat),
         'item_name': (lambda cls: cls.buffer.pack_chat, lambda self: self.buff.unpack_chat),
         'lore': (lambda cls: cls.pack_lore, lambda self: self.unpack_lore),
-        'rarity': (lambda cls: cls.buffer.pack_varint, lambda self: self.buff.unpack_varint),
+        'rarity': (lambda cls: lambda val: cls.buffer.pack_varint(rarities.index(val)), lambda self: lambda: rarities[self.buff.unpack_varint()]),
         'enchantments': (lambda cls: cls.pack_enchantments, lambda self: self.unpack_enchantments),
         'can_place_on': (lambda cls: cls.pack_adventure_mode_predicate, lambda self: self.unpack_adventure_mode_predicate),
         'can_break': (lambda cls: cls.pack_adventure_mode_predicate, lambda self: self.unpack_adventure_mode_predicate),
@@ -39,30 +49,30 @@ class ItemBuffer1_20_5:
         'repair_cost': (lambda cls: cls.buffer.pack_varint, lambda self: self.buff.unpack_varint),
         'creative_slot_lock': None,
         'enchantment_glint_override': (lambda cls: cls.pack_boolean, lambda self: self.unpack_boolean),
-        'intangible_projectile': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Tag
+        'intangible_projectile': None,
         'food': (lambda cls: cls.pack_food, lambda self: self.unpack_food),
         'fire_resistant': None,
         'tool': (lambda cls: cls.pack_tool, lambda self: self.unpack_tool),
         'stored_enchantments': (lambda cls: cls.pack_enchantments, lambda self: self.unpack_enchantments),
         'dyed_color': (lambda cls: cls.pack_dyed_color, lambda self: self.unpack_dyed_color),
-        'map_color': (lambda cls: cls.pack_boolean, lambda self: self.unpack_boolean),
+        'map_color': (lambda cls: lambda val: cls.buffer.pack('i', val), lambda self: lambda: self.buff.unpack('i')),
         'map_id': (lambda cls: cls.buffer.pack_varint, lambda self: self.buff.unpack_varint),
-        'map_decorations': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Compound tag
-        'map_post_processing': (lambda cls: cls.buffer.pack_varint, lambda self: self.buff.unpack_varint),
+        'map_decorations': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  #FIXME: Wrong
+        'map_post_processing': (lambda cls: lambda val: cls.buffer.pack_varint(map_post_processing.index(val)), lambda self: lambda: map_post_processing[self.buff.unpack_varint()]),
         'charged_projectiles': (lambda cls: cls.pack_item_array, lambda self: self.unpack_item_array),
         'bundle_contents': (lambda cls: cls.pack_item_array, lambda self: self.unpack_item_array),
         'potion_contents': (lambda cls: cls.pack_potion_contents, lambda self: self.unpack_potion_contents),
-        'suspicious_stew_effects': (lambda cls: cls.pack_suspicious_stew_effect, lambda self: self.unpack_suspicious_stew_effect),
+        'suspicious_stew_effects': (lambda cls: cls.pack_suspicious_stew_effect, lambda self: self.unpack_suspicious_stew_effect), #FIXME: Should be array?
         'writable_book_content': (lambda cls: cls.pack_writable_book, lambda self: self.buffer.unpack_writable_book),
         'written_book_content': (lambda cls: cls.pack_written_book, lambda self: self.buffer.unpack_written_book),
         'trim': (lambda cls: cls.pack_armor_trim, lambda self: self.unpack_armor_trim),
-        'debug_stick_state': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Compound tag
+        'debug_stick_state': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # FIXME: ??? Compound tag
         'entity_data': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Compound tag
         'bucket_entity_data': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Compound tag
         'block_entity_data': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Compound tag
         'instrument': (lambda cls: cls.pack_instrument, lambda self: self.unpack_instrument),
         'ominous_bottle_amplifier': (lambda cls: cls.buffer.pack_varint, lambda self: self.buff.unpack_varint),
-        'recipes': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Tag
+        'recipes': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # FIXME: List of resource locations
         'lodestone_tracker': (lambda cls: cls.pack_lodestone_tracker, lambda self: self.unpack_lodestone_tracker),
         'firework_explosion': (lambda cls: cls.pack_firework_explosion, lambda self: self.unpack_firework_explosion),
         'fireworks': (lambda cls: cls.pack_fireworks, lambda self: self.unpack_fireworks),
@@ -74,8 +84,8 @@ class ItemBuffer1_20_5:
         'container': (lambda cls: cls.pack_item_array, lambda self: self.unpack_item_array),
         'block_state': (lambda cls: cls.pack_block_state, lambda self: self.unpack_block_state),
         'bees': (lambda cls: cls.pack_bees, lambda self: self.unpack_bees),
-        'lock': (lambda cls: cls.buffer.pack_chat, lambda self: self.buff.unpack_chat),  # Tag
-        'container_loot': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # Compound tag
+        'lock': (lambda cls: cls.buffer.pack_string, lambda self: self.buff.unpack_string),
+        'container_loot': (lambda cls: cls.buffer.pack_nbt, lambda self: self.buff.unpack_nbt),  # FIXME: Wrong
     }
 
     component_types = list(component_handlers.keys())
@@ -186,7 +196,7 @@ class ItemBuffer1_20_5:
         blocks = value.get('blocks', None)
 
         if isinstance(value, str):
-            return cls.buffer.pack_varint(0) + cls.buffer.pack_string(tag)
+            return cls.buffer.pack_varint(-1) + cls.buffer.pack_string(tag)
         elif isinstance(value, list):
             data = cls.buffer.pack_varint(len(blocks) + 1)
 
@@ -305,7 +315,7 @@ class ItemBuffer1_20_5:
 
         return data
 
-    def unpack_adventure_mode_predicate(self):
+    def unpack_adventure_mode_predicate(self): #FIXME: Server can also send "simple" variant
         return {
             'predicates': [self.unpack_block_predicate() for _ in range(self.buffer.unpack_varint())],
             'show_in_tooltip': self.buffer.unpack('?')
@@ -394,7 +404,7 @@ class ItemBuffer1_20_5:
             cls.buffer.pack_varint(len(override_armor_materials))
 
         for (key, value) in override_armor_materials.items():
-            data += cls.buffer.pack_varint(cls.buffer.registry.encode('minecraft:item', key)) + \
+            data += cls.buffer.pack_string(key) + \
                     cls.buffer.pack_string(value)
 
         data += cls.buffer.pack_chat(material['description'])
@@ -415,7 +425,7 @@ class ItemBuffer1_20_5:
                 'item': self.buffer.registry.decode('minecraft:item', self.buffer.unpack_varint()),
                 'item_model_index': self.buffer.unpack('f'),
                 'override_armor_materials': {
-                    self.buffer.unpack_varint(): self.buffer.unpack_string() for _ in range(self.buffer.unpack_varint())
+                    self.buffer.unpack_string(): self.buffer.unpack_string() for _ in range(self.buffer.unpack_varint())
                 },
                 'description': self.buffer.unpack_chat()
             },
@@ -458,7 +468,7 @@ class ItemBuffer1_20_5:
             'potion': self.buffer.unpack_optional(
                 lambda: self.buffer.registry.decode('minecraft:potion', self.buffer.unpack_varint())
             ),
-            'custom_color': self.buffer.unpack_optional(self.buffer.unpack('i')),
+            'custom_color': self.buffer.unpack_optional(lambda: self.buffer.unpack('i')),
             'custom_effects': [self.unpack_potion_effect() for _ in range(self.buffer.unpack_varint())]
         }
 
@@ -484,7 +494,7 @@ class ItemBuffer1_20_5:
 
         data = cls.buffer.pack_varint(amplifier) + \
                cls.buffer.pack_varint(duration) + \
-               cls.buffer.pack('???', ambient, show_particles, show_icon)
+               cls.buffer.pack('????', ambient, show_particles, show_icon, 'hidden_effect' in value)
 
         if 'hidden_effect' in value:
             data += cls.pack_potion_effect(value['hidden_effect'])
@@ -573,8 +583,8 @@ class ItemBuffer1_20_5:
     def unpack_tool_rule(self):
         return {
             'blocks': self.unpack_block_spec(),
-            'speed': self.buffer.unpack_optional(self.buffer.unpack('f')),
-            'correct_for_drops': self.buffer.unpack_optional(self.buffer.unpack('?'))
+            'speed': self.buffer.unpack_optional(lambda: self.buffer.unpack('f')),
+            'correct_for_drops': self.buffer.unpack_optional(lambda: self.buffer.unpack('?'))
         }
 
     # Suspicious Stew ------------------------------------------------------------------
@@ -596,21 +606,26 @@ class ItemBuffer1_20_5:
 
     @classmethod
     def pack_instrument(cls, value):
-        range = value['sound_event'].get('range', None)
-
-        return cls.buffer.pack_string(value['sound_event']['sound_id']) + \
-               cls.buffer.pack_optional(lambda: cls.buffer.pack('f'), range) + \
+        return cls.pack_sound_event(value['sound_event']) + \
                cls.buffer.pack_varint(value['use_duration']) + \
-               cls.buffer.pack('f', value['duration'])
+               cls.buffer.pack('f', value['range'])
 
     def unpack_instrument(self):
         return {
-            'sound_event': {
-                'sound_id': self.buffer.unpack_string(),
-                'range': self.buffer.unpack_optional(lambda: self.buffer.unpack('f')),
-            },
+            'sound_event': self.unpack_sound_event(),
             'use_duration': self.buffer.unpack_varint(),
-            'duration': self.buffer.unpack('f')
+            'range': self.buffer.unpack('f')
+        }
+
+    @classmethod
+    def pack_sound_event(cls, value):
+        return cls.buffer.pack_string(value['sound_id']) + \
+               cls.buffer.pack_optional(lambda: cls.buffer.pack('f'), value.get('range', None))
+
+    def unpack_sound_event(self):
+        return {
+            'sound_id': self.buffer.unpack_string(),
+            'range': self.buffer.unpack_optional(lambda: self.buffer.unpack('f')),
         }
 
     # Lodestone Tracker ------------------------------------------------------------------
@@ -629,7 +644,7 @@ class ItemBuffer1_20_5:
         return cls.buffer.pack_optional(pack_pos, target) + cls.buffer.pack('?', tracked)
 
     def unpack_lodestone_tracker(self):
-        target = self.buffer.unpack_optional(self.buffer.unpack_global_position())
+        target = self.buffer.unpack_optional(self.buffer.unpack_global_position)
 
         if target is not None:
             target = {

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 class ItemBuffer1_21(ItemBuffer1_20_5):
     component_handlers = list(ItemBuffer1_20_5.component_handlers.items())
-    component_handlers.insert(42, ('jukebox_playable', ()))
+    component_handlers.insert(42, ('jukebox_playable', (lambda cls: cls.buffer.pack_jukebox_playable, lambda self: self.buff.unpack_jukebox_playable)))
 
     component_handlers = dict(component_handlers)
     component_types = list(component_handlers.keys())
@@ -58,7 +58,7 @@ class ItemBuffer1_21(ItemBuffer1_20_5):
     def pack_food(cls, value):
         effects = value.get('effects', [])
         can_always_eat = value.get('can_always_eat', False)
-        eat_seconds = value.get('can_always_eat', 1.6)
+        eat_seconds = value.get('eat_seconds', 1.6)
 
         data = cls.buffer.pack_varint(value['nutrition']) + \
             cls.buffer.pack('f?f', value['saturation'], can_always_eat, eat_seconds) + \
