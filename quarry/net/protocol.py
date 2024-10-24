@@ -59,7 +59,7 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
     recv_direction = None
     send_direction = None
     protocol_version = packets.default_protocol_version
-    protocol_mode = "init"
+    protocol_mode = "handshake"
     compression_threshold = -1
     in_game = False
     closed = False
@@ -101,12 +101,12 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
 
     def check_protocol_mode_switch(self, mode):
         transitions = [
-            ("init", "status"),
-            ("init", "login"),
-            ("login", "play"),
+            ("handshake", "status"),
+            ("handshake", "login"),
+            ("login", "game"),
             ("login", "configuration"),
-            ("configuration", "play"),
-            ("play", "configuration")
+            ("configuration", "game"),
+            ("game", "configuration")
         ]
 
         if (self.protocol_mode, mode) not in transitions:
@@ -115,7 +115,7 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
 
     def switch_protocol_mode(self, mode):
         self.check_protocol_mode_switch(mode)
-        self.in_game = mode == "play"
+        self.in_game = mode == "game"
 
         self.protocol_mode = mode
 
@@ -302,7 +302,6 @@ class Protocol(protocol.Protocol, PacketDispatcher, object):
         calls :meth:`packet_unhandled` if no such methods exists. You might
         want to override this to implement your own dispatch logic or logging.
         """
-
         self.log_packet(". recv", name)
 
         dispatched = self.dispatch((name,), buff)

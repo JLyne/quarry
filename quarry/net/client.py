@@ -25,15 +25,15 @@ class ClientProtocol(Protocol):
     login_state = LoginState.CONNECTING
 
     # Convenience functions ---------------------------------------------------
-    def send_handshake(self, intent: ClientIntent):
+    def send_intention(self, intent: ClientIntent):
         # Send handshake
         addr = self.transport.connector.getDestination()
         self.send_packet(
-            "handshake",
-            self.buff_type.pack_varint(self.protocol_version) +
-            self.buff_type.pack_string(addr.host) +
-            self.buff_type.pack('H', addr.port) +
-            self.buff_type.pack_varint(intent.value))
+          "intention",
+          self.buff_type.pack_varint(self.protocol_version) +
+          self.buff_type.pack_string(addr.host) +
+          self.buff_type.pack('H', addr.port) +
+          self.buff_type.pack_varint(intent.value))
 
         # Switch buff type
         self.buff_type = self.factory.get_buff_type(self.protocol_version)
@@ -44,14 +44,14 @@ class ClientProtocol(Protocol):
             self.switch_protocol_mode("login")
 
     def send_status_request(self):
-        self.send_handshake(ClientIntent.STATUS)
+        self.send_intention(ClientIntent.STATUS)
         self.send_packet("status_request")
 
-    def send_login_start(self):
-        self.send_handshake(ClientIntent.LOGIN)
+    def send_hello(self):
+        self.send_intention(ClientIntent.LOGIN)
 
         # TODO: Implement signature sending
-        self.send_packet("login_start",
+        self.send_packet("hello",
                          self.buff_type.pack_string(self.factory.profile.display_name),
                          self.buff_type.pack_uuid(self.factory.profile.uuid))
 
@@ -72,13 +72,19 @@ class ClientProtocol(Protocol):
         pack_array = lambda d: self.buff_type.pack_varint(len(d), max_bits=16) + d
 
         self.send_packet(
-            "login_encryption_response",
+            "key",
             pack_array(p_shared_secret) +
             pack_array(p_verify_token))
 
         # Enable encryption
         self.cipher.enable(self.shared_secret)
         self.logger.debug("Encryption enabled")
+
+    def complete_login(self):
+        self.login_state = LoginState.JOINING
+        # Go to configuration mode
+        self.send_packet("login_acknowledged")
+        self.start_configuration()
 
     # Callbacks ---------------------------------------------------------------
 
@@ -98,7 +104,7 @@ class ClientProtocol(Protocol):
             factory.connect(self.remote_addr.host, self.remote_addr.port)
             self.protocol_version = yield factory.detected_protocol_version
 
-        self.send_login_start()
+        self.send_hello()
 
     def auth_ok(self, data):
         """
@@ -134,13 +140,13 @@ class ClientProtocol(Protocol):
         p_data = buff.unpack_json()
         self.status_response(p_data)
 
-    def packet_login_plugin_request(self, buff):
+    def packet_custom_query(self, buff):
         p_message_id = buff.unpack_varint()
         p_channel = buff.unpack_string()
         p_payload = buff.read()
 
         self.send_packet(
-            "login_plugin_response",
+            "custom_query_answer",
             self.buff_type.pack_varint(p_message_id),
             self.buff_type.pack('?', False))
 
@@ -150,7 +156,7 @@ class ClientProtocol(Protocol):
         self.logger.warn("Kicked: %s" % p_data)
         self.close()
 
-    def packet_login_encryption_request(self, buff):
+    def packet_hello(self, buff):
         if self.login_state != LoginState.CONNECTING:
             raise ProtocolError(f"Can't switch to {LoginState.AUTHORIZING} from {self.login_state}")
 
@@ -185,25 +191,17 @@ class ClientProtocol(Protocol):
         else:
             self.enable_encryption()
 
-    def packet_login_success(self, buff):
-        if self.login_state != LoginState.AUTHORIZING and self.login_state != LoginState.ENCRYPTING:
-            raise ProtocolError(f"Can't switch to {LoginState.JOINING} from {self.login_state}")
-
-        self.login_state = LoginState.JOINING
+    def packet_game_profile(self, buff):
+        if self.login_state == LoginState.JOINING:
+            raise ProtocolError(f"Already logged in")
 
         p_uuid = buff.unpack_uuid()
         p_display_name = buff.unpack_string()
 
         buff.read()  # Properties
+        self.complete_login()
 
-        # Go to configuration mode
-        self.send_packet("login_acknowledged")
-        self.start_configuration()
-
-    def packet_login_set_compression(self, buff):
-        self.set_compression(buff.unpack_varint())
-
-    def packet_set_compression(self, buff):
+    def packet_login_compression(self, buff):
         self.set_compression(buff.unpack_varint())
 
     # 1.20.5+ negotiate data packs
@@ -229,7 +227,7 @@ class ClientProtocol(Protocol):
     def packet_finish_configuration(self, buff):
         self.data_packs.lock()
         self.send_packet("finish_configuration")
-        self.switch_protocol_mode("play")
+        self.switch_protocol_mode("game")
         self.player_joined()
 
         buff.discard()
@@ -246,14 +244,14 @@ class SpawningClientProtocol(ClientProtocol):
 
         super(SpawningClientProtocol, self).__init__(factory, remote_addr)
 
-    # Send a 'player' packet every tick
+    # Send a 'move_player_status_only' packet every tick
     def update_player_inc(self):
-        self.send_packet("player", self.buff_type.pack('?', True))
+        self.send_packet("move_player_status_only", self.buff_type.pack('?', True))
 
     # Sent a 'player position and look' packet every 20 ticks
     def update_player_full(self):
         self.send_packet(
-            "player_position_and_look",
+            "player_position",
             self.buff_type.pack(
                 'dddff?',
                 self.pos_look[0],
@@ -263,7 +261,7 @@ class SpawningClientProtocol(ClientProtocol):
                 self.pos_look[4],
                 True))
 
-    def packet_player_position_and_look(self, buff):
+    def packet_player_position(self, buff):
         p_pos_look = buff.unpack('dddff')
 
         p_flags = buff.unpack('B')
@@ -277,7 +275,7 @@ class SpawningClientProtocol(ClientProtocol):
         teleport_id = buff.unpack_varint()
 
         # Send Player Position And Look
-        self.send_packet("teleport_confirm",
+        self.send_packet("accept_teleportation",
                          self.buff_type.pack_varint(teleport_id))
 
         if not self.spawned:

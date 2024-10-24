@@ -51,7 +51,7 @@ class DataPackDumperProtocol(ClientProtocol):
             buff.discard()  # Ignore the rest of the packet
             reactor.stop()
 
-    def packet_join_game(self, buff):
+    def packet_login(self, buff):
         if self.protocol_version >= 766:
             nbt = TagRoot.from_obj(self.result)
 

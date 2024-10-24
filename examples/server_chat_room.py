@@ -82,13 +82,13 @@ class ChatRoomProtocol(ServerProtocol):
             join_game.append(self.buff_type.pack("?", False))
 
         # Send "Join Game" packet
-        self.send_packet("join_game", *join_game)
+        self.send_packet("login", *join_game)
 
         # Send default spawn position, required to hide Loading Terrain screen
-        self.send_packet("spawn_position", self.buff_type.pack("iii", 0, 0, 0))
+        self.send_packet("set_default_spawn_position", self.buff_type.pack("iii", 0, 0, 0))
 
         # Send game event so client loads chunks
-        self.send_packet("change_game_state", self.buff_type.pack("Bf", 13, 0.0))
+        self.send_packet("game_event", self.buff_type.pack("Bf", 13, 0.0))
 
 
         # Send "Player Position and Look" packet
@@ -103,7 +103,7 @@ class ChatRoomProtocol(ServerProtocol):
             self.buff_type.pack_varint(0)  # teleport id
         ]
 
-        self.send_packet("player_position_and_look", *player_position_data)
+        self.send_packet("player_position", *player_position_data)
 
         # Start sending "Keep Alive" packets
         self.ticker.add_loop(20, self.update_keep_alive)
@@ -121,7 +121,7 @@ class ChatRoomProtocol(ServerProtocol):
         # Send a "Keep Alive" packet
         self.send_packet("keep_alive", self.buff_type.pack('Q', 0))
 
-    def packet_chat_message(self, buff):
+    def packet_chat(self, buff):
         # When we receive a chat message from the player, ask the factory
         # to relay it to all connected players
         p_text = buff.unpack_string()
@@ -146,7 +146,7 @@ class ChatRoomFactory(ServerFactory):
                 continue
 
             # Use system message packet to avoid dealing with signatures
-            player.send_packet("system_message",
+            player.send_packet("system_chat",
                                player.buff_type.pack_chat(message),
                                player.buff_type.pack('?', False))
 

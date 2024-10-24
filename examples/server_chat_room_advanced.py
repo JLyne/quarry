@@ -37,7 +37,7 @@ class ChatRoomProtocol(ServerProtocol):
         self.factory.send_join_game(self)
 
         # Send default spawn position, required to hide Loading Terrain screen
-        self.send_packet("spawn_position", self.buff_type.pack("iii", 0, 0, 0))
+        self.send_packet("set_default_spawn_position", self.buff_type.pack("iii", 0, 0, 0))
 
         # Send "Player Position and Look" packet
         player_position_data = [
@@ -70,8 +70,8 @@ class ChatRoomProtocol(ServerProtocol):
         # Send a "Keep Alive" packet
         self.send_packet("keep_alive", self.buff_type.pack('Q', 0))
 
-    def packet_chat_message(self, buff):
-        if self.protocol_mode != 'play':
+    def packet_chat(self, buff):
+        if self.protocol_mode != 'game':
             return
 
         message = buff.unpack_string()
@@ -273,12 +273,12 @@ class ChatRoomFactory(ServerFactory):
             join_game.append(player.buff_type.pack("?", True))
 
         # Send "Join Game" packet
-        player.send_packet("join_game", *join_game)
+        player.send_packet("login", *join_game)
 
     # Sends a signed chat message to clients
     def broadcast_signed_chat(self, message: SignedMessage, sender_name):
         for player in self.players:
-            if player.protocol_mode != 'play':
+            if player.protocol_mode != 'game':
                 continue
 
             self.send_signed_chat(player, message, sender_name)
@@ -288,7 +288,7 @@ class ChatRoomFactory(ServerFactory):
         if self.online_mode:
             player.pending_messages.append(LastSeenMessage(message.header.sender, message.signature))
 
-        player.send_packet("chat_message",
+        player.send_packet("player_chat",
                            player.buff_type.pack_signed_message(message),
                            player.buff_type.pack_varint(0),  # Chat filtering result, 0 = not filtered
                            player.buff_type.pack_varint(0),  # Message type
@@ -298,7 +298,7 @@ class ChatRoomFactory(ServerFactory):
     # Sends an unsigned chat message using system messages
     def broadcast_unsigned_chat(self, message: str, sender: UUID, sender_name: str):
         for player in self.players:
-            if player.protocol_mode != 'play':
+            if player.protocol_mode != 'game':
                 continue
 
             self.send_unsigned_chat(player, message, sender, sender_name)
@@ -310,14 +310,14 @@ class ChatRoomFactory(ServerFactory):
     # Sends a system message, falling back to chat messages on older clients
     def broadcast_system(self, message: str):
         for player in self.players:
-            if player.protocol_mode != 'play':
+            if player.protocol_mode != 'game':
                 continue
 
             self.send_system(player, message)
 
     @staticmethod
     def send_system(player: ChatRoomProtocol, message: str):
-        player.send_packet("system_message",
+        player.send_packet("system_chat",
                            player.buff_type.pack_chat(message),
                            player.buff_type.pack('?', False))  # Overlay, false = display in chat
 
@@ -335,7 +335,7 @@ class ChatRoomFactory(ServerFactory):
     def broadcast_player_list_add(self, added: ChatRoomProtocol):
         for player in self.players:
             # Exclude the added player, they will be sent the full player list separately
-            if player.protocol_mode == 'play' and player != added:
+            if player.protocol_mode == 'game' and player != added:
                 self.send_player_list_add(player, [added])
 
     @staticmethod
@@ -347,7 +347,7 @@ class ChatRoomFactory(ServerFactory):
         data.append(player.buff_type.pack_varint(len(added)))  # Player entry count
 
         for entry in added:
-            if entry.protocol_mode != 'play':
+            if entry.protocol_mode != 'game':
                 continue
 
             data.append(player.buff_type.pack_uuid(entry.uuid))  # Player UUID
@@ -365,14 +365,14 @@ class ChatRoomFactory(ServerFactory):
             data.append(player.buff_type.pack_varint(0))  # Latency
             data.append(player.buff_type.pack('?', False))  # No display name
 
-        player.send_packet('player_list_item', *data)
+        player.send_packet('player_info_update', *data)
 
     # Sends player list update for leaving player to other players
     def broadcast_player_list_remove(self, removed: ChatRoomProtocol):
         for player in self.players:
-            if player.protocol_mode == 'play' and player != removed:
+            if player.protocol_mode == 'game' and player != removed:
 
-                player.send_packet('player_list_remove',
+                player.send_packet('player_info_remove',
                                    player.buff_type.pack_varint(1),  # Player entry count
                                    player.buff_type.pack_uuid(removed.uuid))  # Player UUID
 

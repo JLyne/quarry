@@ -13,7 +13,7 @@ from quarry.net.auth import ProfileCLI
 
 
 class ChatLoggerProtocol(SpawningClientProtocol):
-    def packet_system_message(self, buff):
+    def packet_system_chat(self, buff):
         p_text = buff.unpack_chat().to_string()
         p_display = not buff.unpack('?')
 
@@ -22,7 +22,7 @@ class ChatLoggerProtocol(SpawningClientProtocol):
         if p_display and p_text.strip():  # Ignore game info messages
             self.logger.info(":: %s" % p_text)
 
-    def packet_chat_message(self, buff):
+    def packet_player_chat(self, buff):
         p_signed_message = buff.unpack_signed_message()
         buff.unpack_varint()  # Filter result
         p_position = buff.unpack_varint()

@@ -60,25 +60,25 @@ class ServerProtocol(Protocol):
         self.velocity_message_id = random.randint(0, 2147483647)
 
     # Convenience functions ---------------------------------------------------
-    def send_login_success(self):
+    def complete_login(self):
         if self.factory.compression_threshold:
             # Send set compression
             self.send_packet(
-                "login_set_compression",
+                "login_compression",
                 self.buff_type.pack_varint(
                     self.factory.compression_threshold))
             self.set_compression(self.factory.compression_threshold)
 
         if self.protocol_version >= 766:  # 1.20.5+
             self.send_packet(
-                "login_success",
+                "game_profile",
                 self.buff_type.pack_uuid(self.uuid) +
                 self.buff_type.pack_string(self.display_name) +
                 self.buff_type.pack_varint(0) +
                 self.buff_type.pack('?', True))  # strict error handling?
         else:
             self.send_packet(
-                "login_success",
+                "game_profile",
                 self.buff_type.pack_uuid(self.uuid) +
                 self.buff_type.pack_string(self.display_name) +
                 self.buff_type.pack_varint(0))  # Profile properties
@@ -89,7 +89,7 @@ class ServerProtocol(Protocol):
         """Closes the connection"""
         if not self.closed and reason is not None:
             # Kick the player if possible.
-            if self.protocol_mode == "play":
+            if self.protocol_mode == "game":
                 self.send_packet("disconnect", self.buff_type.pack_chat(reason))
                 super(ServerProtocol, self).close(reason)
             else:
@@ -144,7 +144,7 @@ class ServerProtocol(Protocol):
 
     def connection_lost(self, reason=None):
         """Called when the connection is lost"""
-        if self.protocol_mode in ("login", "play"):
+        if self.protocol_mode in ("login", "game"):
             self.factory.players.discard(self)
         Protocol.connection_lost(self, reason)
 
@@ -152,7 +152,7 @@ class ServerProtocol(Protocol):
         """Called when auth with mojang succeeded (online mode only)"""
         self.display_name_confirmed = True
         self.uuid = UUID.from_hex(data['id'])
-        self.send_login_success()
+        self.complete_login()
 
     def player_joined(self):
         """Called when the player joins the game"""
@@ -160,7 +160,7 @@ class ServerProtocol(Protocol):
 
         self.logger.info("%s has joined." % self.display_name)
 
-        self.switch_protocol_mode("play")
+        self.switch_protocol_mode("game")
 
     def player_left(self):
         """Called when the player leaves the game"""
@@ -173,7 +173,7 @@ class ServerProtocol(Protocol):
 
     # Packet handlers ---------------------------------------------------------
 
-    def packet_handshake(self, buff):
+    def packet_intention(self, buff):
         p_protocol_version = buff.unpack_varint()
         p_connect_host = buff.unpack_string()
         p_connect_port = buff.unpack("H")
@@ -221,7 +221,7 @@ class ServerProtocol(Protocol):
         self.connect_host = p_connect_host
         self.connect_port = p_connect_port
 
-    def packet_login_start(self, buff):
+    def packet_hello(self, buff):
         if self.login_state != LoginState.HELLO:
             raise ProtocolError("Unexpected hello packet")
 
@@ -235,21 +235,21 @@ class ServerProtocol(Protocol):
 
             if self.protocol_version >= 766:  # 1.20.5+
                 self.send_packet(
-                    "login_encryption_request",
+                    "hello",
                     self.buff_type.pack_string(self.server_id),
                     pack_array(self.factory.public_key),
                     pack_array(self.verify_token),
                     self.buff_type.pack('?', True))  # Should authenticate
             else:
                 self.send_packet(
-                    "login_encryption_request",
+                    "hello",
                     self.buff_type.pack_string(self.server_id),
                     pack_array(self.factory.public_key),
                     pack_array(self.verify_token))
 
         elif self.factory.velocity_forwarding:
             self.login_state = LoginState.NEGOTIATING
-            self.send_packet("login_plugin_request",
+            self.send_packet("custom_query",
                              self.buff_type.pack_varint(self.velocity_message_id),
                              self.buff_type.pack_string("velocity:player_info"),
                              b'')
@@ -257,11 +257,11 @@ class ServerProtocol(Protocol):
             self.login_state = LoginState.VERIFYING
             self.display_name_confirmed = True
             self.uuid = UUID.from_offline_player(self.display_name)
-            self.send_login_success()
+            self.complete_login()
 
         buff.discard()
 
-    def packet_login_plugin_response(self, buff):
+    def packet_custom_query_answer(self, buff):
         if self.login_state != LoginState.NEGOTIATING:
             raise ProtocolError("Out-of-order login")
 
@@ -296,9 +296,9 @@ class ServerProtocol(Protocol):
 
         self.login_state = LoginState.VERIFYING
         self.display_name_confirmed = True
-        self.send_login_success()
+        self.complete_login()
 
-    def packet_login_encryption_response(self, buff):
+    def packet_key(self, buff):
         if self.login_state != LoginState.KEY:
             raise ProtocolError("Unexpected key packet")
 
@@ -407,11 +407,11 @@ class ServerProtocol(Protocol):
         # send status response
         self.send_packet("status_response", self.buff_type.pack_json(d))
 
-    def packet_status_ping(self, buff):
+    def packet_ping_request(self, buff):
         time = buff.unpack("Q")
 
         # send ping
-        self.send_packet("status_pong", self.buff_type.pack("Q", time))
+        self.send_packet("pong_response", self.buff_type.pack("Q", time))
         self.close()
 
 

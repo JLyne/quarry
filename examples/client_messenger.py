@@ -31,7 +31,7 @@ class StdioProtocol(basic.LineReceiver):
 class MinecraftProtocol(SpawningClientProtocol):
     spawned = False
     
-    def packet_system_message(self, buff):
+    def packet_system_chat(self, buff):
         p_text = buff.unpack_chat().to_string()
         # Ignore game info (action bar) messages
         p_display = not buff.unpack('?')  # Boolean for whether message is game info
@@ -41,7 +41,7 @@ class MinecraftProtocol(SpawningClientProtocol):
         if p_display and p_text.strip():
             self.stdio_protocol.send_line(":: %s" % p_text)
 
-    def packet_chat_message(self, buff):
+    def packet_player_chat(self, buff):
         p_signed_message = buff.unpack_signed_message()
         buff.unpack_varint()  # Filter result
         p_position = buff.unpack_varint()
@@ -63,7 +63,7 @@ class MinecraftProtocol(SpawningClientProtocol):
         data.append(self.buff_type.pack_last_seen_list([]))  # Add empty last seen list
         data.append(self.buff_type.pack('?', False))  # Don't provide optional last received message
 
-        self.send_packet("chat_message", *data)
+        self.send_packet("chat", *data)
 
 
 class MinecraftFactory(ClientFactory):

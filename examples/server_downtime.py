@@ -11,7 +11,7 @@ from quarry.net.server import ServerFactory, ServerProtocol
 
 
 class DowntimeProtocol(ServerProtocol):
-    def packet_login_start(self, buff):
+    def packet_hello(self, buff):
         buff.discard()
         self.close(self.factory.motd)
 

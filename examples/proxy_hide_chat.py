@@ -24,7 +24,7 @@ class QuietBridge(Bridge):
             buff.restore()
             self.upstream.send_packet("chat_command", buff.read())
 
-    def packet_upstream_chat_message(self, buff):
+    def packet_upstream_chat(self, buff):
         buff.save()
         chat_message = self.read_chat(buff, "upstream")
         self.logger.info(" >> %s" % chat_message)
@@ -40,7 +40,7 @@ class QuietBridge(Bridge):
         else:
             # Pass to upstream
             buff.restore()
-            self.upstream.send_packet("chat_message", buff.read())
+            self.upstream.send_packet("chat", buff.read())
 
     def toggle_quiet_mode(self):
         # Switch mode
@@ -51,7 +51,7 @@ class QuietBridge(Bridge):
 
         self.send_system(msg)
 
-    def packet_downstream_chat_message(self, buff):
+    def packet_downstream_player_chat(self, buff):
         chat_message = self.read_chat(buff, "downstream")
         self.logger.info(" :: %s" % chat_message)
 
@@ -61,7 +61,7 @@ class QuietBridge(Bridge):
 
         # Pass to downstream
         buff.restore()
-        self.downstream.send_packet("chat_message", buff.read())
+        self.downstream.send_packet("player_chat", buff.read())
 
     def read_chat(self, buff, direction):
         buff.save()
@@ -84,7 +84,7 @@ class QuietBridge(Bridge):
                 p_sender_name, p_signed_message.unsigned_content or p_signed_message.body.message)
 
     def send_system(self, message):
-        self.downstream.send_packet("system_message",
+        self.downstream.send_packet("system_chat",
                                     self.downstream.buff_type.pack_chat(message),
                                     self.downstream.buff_type.pack('?', False))  # Overlay false to put in chat
 

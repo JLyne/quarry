@@ -227,15 +227,15 @@ class Bridge(PacketDispatcher):
         elif direction == "upstream":
             self.upstream.send_packet(name, buff.read())
 
-    def packet_downstream_set_compression(self, buff):
+    def packet_downstream_login_compression(self, buff):
         self.upstream.set_compression(buff.unpack_varint())
 
     # When client completes configuration, switch both sides to play
     def packet_upstream_finish_configuration(self, buff):
         buff.discard()
         self.upstream.send_packet("finish_configuration")
-        self.upstream.switch_protocol_mode("play")
-        self.downstream.switch_protocol_mode("play")
+        self.upstream.switch_protocol_mode("game")
+        self.downstream.switch_protocol_mode("game")
 
     # When client acknowledges configuration, switch both sides to configuration
     def packet_upstream_configuration_acknowledged(self, buff):

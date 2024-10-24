@@ -14,7 +14,7 @@ class PlayerListProtocol(ClientProtocol):
     def setup(self):
         self.players = {}
 
-    def packet_player_list_item(self, buff):
+    def packet_player_info_update(self, buff):
         p_action = buff.unpack_varint()
         p_count = buff.unpack_varint()
         for i in range(p_count):
@@ -77,7 +77,7 @@ class PlayerListProtocol(ClientProtocol):
                 if p_uuid in self.players:
                     del self.players[p_uuid]
 
-    def packet_chunk_data(self, buff):
+    def packet_level_chunk_with_light(self, buff):
         buff.discard()
 
         # convert self.players into a more readable format
