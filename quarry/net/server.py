@@ -187,6 +187,10 @@ class ServerProtocol(Protocol):
             self.close(Message({'translate': 'multiplayer.disconnect.transfers_disabled'}))
             return
 
+        if p_intent == ClientIntent.STATUS:
+            self.switch_protocol_mode("status")
+            return
+
         if p_intent == ClientIntent.LOGIN or p_intent == ClientIntent.TRANSFER:
             self.switch_protocol_mode("login")
             self.transferred = p_intent == ClientIntent.TRANSFER
