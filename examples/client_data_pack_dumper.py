@@ -28,14 +28,13 @@ class DataPackDumperProtocol(ClientProtocol):
                 name = buff.unpack_string()
 
                 if buff.unpack('?'):
+                    nbt = buff.unpack_nbt()
                     self.result[registry]["value"].append({
-                        "id": i,
                         "name": name,
-                        "element": buff.unpack_nbt().body.to_obj()
+                        "element": nbt.body.to_obj()
                     })
                 else:
                     self.result[registry]["value"].append({
-                        "id": i,
                         "name": name,
                         "element": {}
                     })

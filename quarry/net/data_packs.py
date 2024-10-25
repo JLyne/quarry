@@ -83,29 +83,13 @@ class DataPacks:
             return self.final_registries[registry_id]
 
         data = {}
-        id = 0
 
         for pack in self.load_order:
             excluded = (pack, self.packs[pack].version) in exclude
             registry = self.packs[pack].contents.get(registry_id, {})
 
             for (key, value) in registry.items():
-                old_id = None
-
-                if data.get(key) is not None:
-                    old_id = data[key].get('id', None)
-
                 data[key] = None if excluded else deepcopy(value)
-
-                # Keep existing id if overriding previous value
-                if old_id is not None:
-                    if not excluded:
-                        data[key]['id'] = old_id
-                else:
-                    if not excluded:
-                        data[key]['id'] = id
-
-                    id += 1
 
         return data
 
