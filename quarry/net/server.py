@@ -113,6 +113,7 @@ class ServerProtocol(Protocol):
 
         if self.protocol_version < 766:  # <1.20.5 just sends registries
             self.send_registries([])
+            self.send_tags()
             self.send_packet("finish_configuration")  # Tell client to leave configuration mode
         else:
             self.send_known_data_packs()
@@ -139,6 +140,27 @@ class ServerProtocol(Protocol):
                         data.append(self.buff_type.pack_nbt(TagRoot.from_obj(value)))
 
                 self.send_packet("registry_data", *data)
+
+    def send_tags(self):
+        tags = self.data_packs.get_tags()
+
+        if tags is None:
+            return
+
+        data = self.buff_type.pack_varint(len(tags))
+
+        for (registry, registry_tags) in tags.items():
+            data += self.buff_type.pack_string(str(registry)) + \
+                self.buff_type.pack_varint(len(registry_tags))
+
+            for (tag, values) in registry_tags.items():
+                data += self.buff_type.pack_string(str(tag)) + \
+                    self.buff_type.pack_varint(len(values))
+
+                for value in values:
+                    data += self.buff_type.pack_varint(value)
+
+        self.send_packet("update_tags", data)
 
     # Callbacks ---------------------------------------------------------------
 
@@ -375,6 +397,7 @@ class ServerProtocol(Protocol):
         buff.discard()
 
         self.send_registries(client_packs)
+        self.send_tags()
         self.send_packet("finish_configuration")  # Tell client to leave configuration mode
 
     # Leaving configuration mode

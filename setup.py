@@ -32,6 +32,7 @@ setup(
     package_data={'quarry': [
         'data/packets/*.csv',
         'data/data_packs/*.nbt',
+        'data/tags/*.nbt',
         'data/keys/*',
     ]},
 )

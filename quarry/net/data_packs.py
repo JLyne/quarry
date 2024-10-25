@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import Dict, Deque, Optional, List, Tuple
 
 from quarry.data.data_packs import configurable_registries
+from quarry.data.tags import vanilla_static_tags, vanilla_configurable_tags
 from quarry.types.data_pack import DataPack
 from quarry.types.namespaced_key import NamespacedKey
 from quarry.types.nbt import TagRoot
@@ -92,6 +93,37 @@ class DataPacks:
                 data[key] = None if excluded else deepcopy(value)
 
         return data
+
+    def get_tags(self):
+        result = {}
+
+        if self.protocol_version not in vanilla_static_tags:
+            return None
+
+        for registry in vanilla_static_tags[self.protocol_version]:
+            result[registry] = self.get_registry_tags(registry)
+
+        for registry in vanilla_configurable_tags[self.protocol_version]:
+            result[registry] = self.get_registry_tags(registry)
+
+        return result
+
+    def get_registry_tags(self, registry_id: NamespacedKey):
+        if registry_id not in configurable_registries[self.protocol_version]:
+            return vanilla_static_tags[self.protocol_version][registry_id]
+
+        result = {}
+
+        registry_keys = list(self.get_registry(registry_id)) # get list of keys
+
+        for (tag, values) in vanilla_configurable_tags[self.protocol_version][registry_id].items():
+            result[tag] = []
+
+            for value in values:
+                if value in registry_keys:
+                    result[tag].append(registry_keys.index(value))
+
+        return result
 
     def get_nbt_codec(self):
         """
