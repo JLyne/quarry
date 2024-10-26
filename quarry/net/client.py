@@ -3,9 +3,11 @@ from enum import Enum
 from twisted.internet import reactor, protocol, defer
 from twisted.python import failure
 
+from quarry.data.data_packs import pack_formats
 from quarry.types.chat import Message
 from quarry.net.protocol import Factory, Protocol, ProtocolError, ClientIntent
 from quarry.net import auth, crypto
+from quarry.types.data_pack import DataPack
 from quarry.types.namespaced_key import NamespacedKey
 
 
@@ -23,6 +25,7 @@ class ClientProtocol(Protocol):
     send_direction = "upstream"
 
     login_state = LoginState.CONNECTING
+    server_data_pack = None
 
     # Convenience functions ---------------------------------------------------
     def send_intention(self, intent: ClientIntent):
@@ -218,13 +221,35 @@ class ClientProtocol(Protocol):
         # Remove client packs the server isn't using
         for pack in self.data_packs.get_packs():
             if (pack.id, pack.version) not in server_packs:
-                print(f"Removing unused pack {pack.id}")
+                print(f"Removing unused pack {pack.id} {pack.version}")
                 self.data_packs.remove_data_pack(pack.id)
 
         self.send_known_data_packs()
 
+    def packet_registry_data(self, buff):
+        if self.server_data_pack is None:
+            self.server_data_pack = DataPack(NamespacedKey("minecraft", "server"), "1.0", pack_formats[self.protocol_version], {})
+
+        if self.protocol_version >= 766: # 1.20.5+
+            registry = buff.unpack_string()
+            registry_contents = {}
+
+            for i in range(buff.unpack_varint()):
+                name = buff.unpack_string()
+
+                if buff.unpack('?'):
+                    registry_contents[NamespacedKey.from_string(name)] = buff.unpack_nbt().body.to_obj()
+
+            self.server_data_pack.contents[NamespacedKey.from_string(registry)] = registry_contents
+        else:
+            buff.discard()
+            # TODO
+
     # Go to play mode
     def packet_finish_configuration(self, buff):
+        if self.server_data_pack is not None:
+            self.data_packs.add_data_pack(self.server_data_pack)
+
         self.data_packs.lock()
         self.send_packet("finish_configuration")
         self.switch_protocol_mode("game")
