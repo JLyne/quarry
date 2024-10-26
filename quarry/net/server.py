@@ -69,7 +69,13 @@ class ServerProtocol(Protocol):
                     self.factory.compression_threshold))
             self.set_compression(self.factory.compression_threshold)
 
-        if self.protocol_version >= 766:  # 1.20.5+
+        if self.protocol_version >= 768:  # 1.21.2 +
+            self.send_packet(
+                "login_finished",
+                self.buff_type.pack_uuid(self.uuid) +
+                self.buff_type.pack_string(self.display_name) +
+                self.buff_type.pack_varint(0))
+        elif 766 <= self.protocol_version <= 767:  # 1.20.5 - 1.21.1
             self.send_packet(
                 "game_profile",
                 self.buff_type.pack_uuid(self.uuid) +
