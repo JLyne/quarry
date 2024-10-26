@@ -1,13 +1,7 @@
 import functools
 import json
 import re
-from typing import List
-
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.hazmat.primitives.hashes import SHA256
+from typing import List, Optional, Tuple
 
 from quarry.types.uuid import UUID
 
@@ -193,77 +187,83 @@ class Message(object):
         return "<Message %r>" % str(self)
 
 
-class LastSeenMessage(object):
-    def __init__(self, sender: UUID, signature=None):
-        self.sender = sender
-        self.signature = signature
-
-    def __eq__(self, other):
-        if isinstance(other, LastSeenMessage):
-            return self.sender == other.sender and self.signature == other.signature
-        return NotImplemented
-
-
 class SignedMessageHeader(object):
     """
     Represents the header of a signed minecraft chat message
-    Includes the sender UUID and optional signature of the preceding message
+    Includes the sender UUID, message index and optional signature
     """
 
-    def __init__(self, sender: UUID, previous_signature: bytes = None):
+    def __init__(self, sender: UUID, index: int, signature: bytes = None):
         self.sender = sender
-        self.previous_signature = previous_signature
+        self.index = index
+        self.signature = signature
 
     def __eq__(self, other):
         if isinstance(other, SignedMessageHeader):
-            return self.sender == other.sender and self.previous_signature == other.previous_signature
-        elif isinstance(other, LastSeenMessage):
-            return self.sender == other.sender and self.previous_signature == other.signature
+            return self.sender == other.sender and self.index == other.index and self.signature == self.signature
         return NotImplemented
 
 
 class SignedMessageBody(object):
     """
     Represents the body of a signed minecraft chat message
-    Includes the message content, optional decorated message, timestamp and salt
+    Includes the message content, timestamp, salt and list of last seen messagesids/signatures
     """
 
-    def __init__(self, message: str, timestamp: int, salt: int, decorated_message: Message = None,
-                 last_seen: List[LastSeenMessage] = None):
+    def __init__(self, message: str, timestamp: int, salt: int, last_seen: List[Tuple[int, Optional[bytes]]]):
         self.message = message
-        self.decorated_message = decorated_message
         self.timestamp = timestamp
         self.salt = salt
-
-        if last_seen is None:
-            last_seen = []
-
         self.last_seen = last_seen
 
     def digest(self):
-        digest = hashes.Hash(hashes.SHA256())
-
-        digest.update(self.salt.to_bytes(8, 'big'))  # Salt
-        digest.update(int(self.timestamp / 1000).to_bytes(8, 'big'))  # Timestamp in seconds
-        digest.update(self.message.encode("utf-8"))  # Message bytes
-        digest.update((70).to_bytes(1, 'big'))  # Mojang adds a 70 byte after the message for some reason?
-
-        if self.decorated_message is not None:
-            digest.update(self.decorated_message.value.encode("utf-8"))  # FIXME: Test this
-
-        for entry in self.last_seen:
-            digest.update((70).to_bytes(1, 'big'))  # Mojang adds a 70 byte before each entry for some reason?
-            digest.update(entry.sender.bytes)
-            digest.update(entry.signature)
-
-        return digest.finalize()
+        # TODO
+        raise NotImplementedError()
 
     def __eq__(self, other):
         if isinstance(other, SignedMessageBody):
             return self.message == other.message \
-                   and self.decorated_message == other.decorated_message \
                    and self.timestamp == other.timestamp \
                    and self.salt == other.salt
+        return NotImplemented
+
+
+class SignedMessageFormatting(object):
+    """
+    Represents the formatting information of a signed minecraft chat message
+    Includes the chat message type, sender name and optional target name components
+    """
+
+    def __init__(self, chat_type: int, sender_name: Message, target_name: Message = None):
+        self.chat_type = chat_type
+        self.sender_name = sender_name
+        self.target_name = target_name
+
+    def __eq__(self, other):
+        if isinstance(other, SignedMessageFormatting):
+            return self.chat_type == other.chat_type and self.sender_name == other.sender_name and self.target_name == self.target_name
+        return NotImplemented
+
+class SignedMessageFiltering(object):
+    """
+    Represents the fitlering information of a signed minecraft chat message
+    Includes the filter type and optional filter type bits
+    """
+
+    def __init__(self, filter_type: int, filter_type_bits: Optional[List[int]] = None):
+        self.filter_type = filter_type
+
+        if self.filter_type != 1 and filter_type_bits is not None:
+            raise ValueError("Only partially filtered messages should have filter_type_bits")
+
+        if self.filter_type == 1 and filter_type_bits is None:
+            raise ValueError("filter_type_bits are required for partially filtered messages")
+
+        self.filter_type_bits = filter_type_bits
+
+    def __eq__(self, other):
+        if isinstance(other, SignedMessageFiltering):
+            return self.filter_type == other.filter_type and self.filter_type_bits == other.filter_type_bits
         return NotImplemented
 
 
@@ -271,40 +271,32 @@ class SignedMessage(object):
     """
     Represents a signed minecraft chat message
     Includes:
-     - The message header, containing the sender UUID and optionally the previous message's signature,
-     - The message body, containing the signed message, optional signed decorated message, timestamp and salt
-     - The message signature, which may not be valid and can be checked with verify()
-     - Optional unsigned message content
+     - The message header, containing the sender UUID, message index and optional signature.
+     - The message body, containing the message content, timestamp and salt.
+     - The message filtering, containing the chat message filter type and optional filter type bits.
+     - The message formatting, containing the chat message type, sender name and optional target name components.
+     - Optional unsigned message content.
+    The message signature can be checked with verify()
     """
 
-    def __init__(self, header: SignedMessageHeader, signature: bytes, body: SignedMessageBody,
+    def __init__(self, header: SignedMessageHeader, body: SignedMessageBody,
+                 filtering: SignedMessageFiltering, formatting: SignedMessageFormatting,
                  unsigned_content: Message = None):
         self.header = header
-        self.signature = signature
         self.body = body
+        self.filtering = filtering
+        self.formatting = formatting
         self.unsigned_content = unsigned_content
 
-    def verify(self, key: RSAPublicKey):
-        data = b''
-
-        if key is None or self.header.sender is None:
-            return False
-
-        if self.header.previous_signature is not None:
-            data = data + self.header.previous_signature
-
-        data = data + self.header.sender.bytes + self.body.digest()
-
-        try:
-            key.verify(self.signature, data, PKCS1v15(), SHA256())
-            return True
-        except InvalidSignature:
-            return False
+    def verify(self):
+        # TODO
+        raise NotImplementedError()
 
     def __eq__(self, other):
         if isinstance(other, SignedMessage):
             return self.header == other.header \
                    and self.body == other.body \
-                   and self.signature == other.signature \
+                   and self.filtering == other.filtering \
+                   and self.formatting == other.formatting \
                    and self.unsigned_content == other.unsigned_content
         return NotImplemented

@@ -14,6 +14,7 @@ from twisted.internet import defer, reactor, stdio
 from twisted.protocols import basic
 from quarry.net.auth import ProfileCLI
 from quarry.net.client import ClientFactory, SpawningClientProtocol
+from quarry.types.namespaced_key import NamespacedKey
 
 
 class StdioProtocol(basic.LineReceiver):
@@ -42,26 +43,25 @@ class MinecraftProtocol(SpawningClientProtocol):
             self.stdio_protocol.send_line(":: %s" % p_text)
 
     def packet_player_chat(self, buff):
-        p_signed_message = buff.unpack_signed_message()
-        buff.unpack_varint()  # Filter result
-        p_position = buff.unpack_varint()
-        p_sender_name = buff.unpack_chat()
+        signed_message = buff.unpack_signed_message()
+        sender_name = signed_message.formatting.sender_name
+        registry = self.data_packs.get_registry(NamespacedKey.minecraft('chat_type'))
 
         buff.discard()
+        type = list(registry.keys())[signed_message.formatting.chat_type]
 
-        if p_position not in (1, 2):  # Ignore system and game info messages
+        if type == NamespacedKey.minecraft("chat"):  # Ignore system and game info messages
             # Sender name is sent separately to the message text
             self.stdio_protocol.send_line(
-                ":: <%s> %s" % (p_sender_name, p_signed_message.unsigned_content or p_signed_message.body.message))
+                ":: <%s> %s" % (sender_name, signed_message.unsigned_content or signed_message.body.message))
 
     def send_chat(self, text):
         data = [self.buff_type.pack_string(text)]
 
         data.append(self.buff_type.pack('QQ', int(time() * 1000), 0))   # Current timestamp, empty salt
-        data.append(self.buff_type.pack_byte_array(b''))  # Empty signature
-        data.append(self.buff_type.pack('?', False))  # Not previewed
-        data.append(self.buff_type.pack_last_seen_list([]))  # Add empty last seen list
-        data.append(self.buff_type.pack('?', False))  # Don't provide optional last received message
+        data.append(self.buff_type.pack('?', False))  # No signature
+        data.append(self.buff_type.pack_varint(0))  # Message count?
+        data.append(self.buff_type.pack('bbb', 0,0,0))  # Acknowledged messages. Fixed 20 bit bitset which needs 3 bytes
 
         self.send_packet("chat", *data)
 

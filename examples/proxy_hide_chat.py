@@ -6,7 +6,8 @@ This client doesn't handle system messages, and assumes none of them contain cha
 """
 
 from twisted.internet import reactor
-from quarry.types.uuid import UUID
+
+from quarry.types.namespaced_key import NamespacedKey
 from quarry.net.proxy import DownstreamFactory, Bridge
 
 
@@ -71,17 +72,17 @@ class QuietBridge(Bridge):
 
             return p_text
         elif direction == "downstream":
-            p_signed_message = buff.unpack_signed_message()
-            buff.unpack_varint()  # Filter result
-            p_position = buff.unpack_varint()
-            p_sender_name = buff.unpack_chat()
+            signed_message = buff.unpack_signed_message()
+            sender_name = signed_message.formatting.sender_name
+            registry = self.upstream.data_packs.get_registry(NamespacedKey.minecraft('chat_type'))
 
             buff.discard()
+            type = list(registry.keys())[signed_message.formatting.chat_type]
 
-            if p_position not in (1, 2):  # Ignore system and game info messages
+            if type == NamespacedKey.minecraft("chat"):  # Ignore system and game info messages
                 # Sender name is sent separately to the message text
                 return ":: <%s> %s" % (
-                p_sender_name, p_signed_message.unsigned_content or p_signed_message.body.message)
+                sender_name, signed_message.unsigned_content or signed_message.body.message)
 
     def send_system(self, message):
         self.downstream.send_packet("system_chat",

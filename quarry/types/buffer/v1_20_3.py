@@ -2,14 +2,14 @@ import json
 import string
 import struct
 import zlib
-from typing import List
 
 from cryptography.hazmat.primitives._serialization import Encoding, PublicFormat
 
 from quarry.net.auth import PlayerPublicKey
 from quarry.net.crypto import import_public_key
 from quarry.types.buffer import BufferUnderrun
-from quarry.types.chat import LastSeenMessage, SignedMessage, SignedMessageHeader, SignedMessageBody
+from quarry.types.chat import SignedMessage, SignedMessageHeader, SignedMessageBody, \
+    SignedMessageFormatting, SignedMessageFiltering
 from quarry.types.chunk import BlockArray
 from quarry.types.registry import OpaqueRegistry
 from quarry.types.uuid import UUID
@@ -1107,70 +1107,72 @@ class Buffer1_20_3:
     # Secure chat -------------------------------------------------------------
 
     @classmethod
-    def pack_last_seen_list(cls, entries: List[LastSeenMessage]):
-        packed = cls.pack_varint(len(entries))
-
-        if len(entries) > 5:
-            from quarry.net.protocol import ProtocolError
-            raise ProtocolError("Last seen list is too large")
-
-        for entry in entries:
-            packed = packed + cls.pack_last_seen_entry(entry)
-
-        return packed
-
-    def unpack_last_seen_list(self):
-        seen_messages = []
-        seen_messages_length = self.unpack_varint()
-
-        if seen_messages_length > 5:
-            from quarry.net.protocol import ProtocolError
-            raise ProtocolError("Last seen list is too large")
-
-        for i in range(seen_messages_length):
-            seen_messages.append(self.unpack_last_seen_entry())
-
-        return seen_messages
-
-    @classmethod
-    def pack_last_seen_entry(cls, entry: LastSeenMessage):
-        return cls.pack_uuid(entry.sender) + cls.pack_byte_array(entry.signature)
-
-    def unpack_last_seen_entry(self):
-        return LastSeenMessage(self.unpack_uuid(), self.unpack_byte_array())
-
-    @classmethod
-    def pack_last_received(cls, entry: LastSeenMessage):
-        return cls.pack_optional(cls.pack_last_seen_entry, entry)
-
-    def unpack_last_received(self):
-        return self.unpack_optional(self.unpack_last_seen_entry)
-
-    @classmethod
     def pack_signed_message(cls, message: SignedMessage):
-        return cls.pack_optional(cls.pack_byte_array, message.header.previous_signature) \
-               + cls.pack_uuid(message.header.sender) \
-               + cls.pack_byte_array(message.signature or b'') \
-               + cls.pack_string(message.body.message) \
-               + cls.pack_optional(cls.pack_chat, message.body.decorated_message) \
-               + cls.pack('QQ', message.body.timestamp, message.body.salt) \
-               + cls.pack_last_seen_list(message.body.last_seen) \
-               + cls.pack_optional(cls.pack_chat, message.unsigned_content)
+        def pack_signature(signature):
+            data = b""
 
-    def unpack_signed_message(self):
-        previous_signature = self.unpack_optional(self.unpack_byte_array)
+            for i in range(256):
+                data += cls.pack('b', signature[i])
+
+        data = cls.pack_uuid(message.header.sender) + \
+            cls.pack_varint(message.header.index) + \
+            cls.pack_optional(pack_signature, message.header.signature) + \
+            cls.pack_string(message.body.message) + \
+            cls.pack('QQ', message.body.timestamp, message.body.salt) + \
+            cls.pack_varint(len(message.body.last_seen))
+
+        for previous in message.body.last_seen:
+            data += cls.pack_varint(previous[0] + 1)
+
+            if previous[1] is not None:
+                data += pack_signature(previous[1])
+
+        data += cls.pack_optional(cls.pack_chat, message.unsigned_content) + \
+            cls.pack_varint(message.filtering.filter_type)
+
+        if message.filtering.filter_type == 1:
+            data += cls.pack_array('Q', message.filtering.filter_type_bits)
+
+        data += cls.pack_varint(message.formatting.chat_type + 1) + \
+            cls.pack_chat(message.formatting.sender_name) + \
+            cls.pack_optional(cls.pack_chat, message.formatting.target_name)
+
+        return data
+
+    def unpack_signed_message(self) -> SignedMessage:
         uuid = self.unpack_uuid()
-        signature = self.unpack_byte_array()
+        index = self.unpack_varint()
+        signature = self.unpack_optional(lambda: self.read(256))
+
         message = self.unpack_string()
-        decorated_message = self.unpack_optional(self.unpack_chat)
         timestamp = self.unpack('Q')
         salt = self.unpack('Q')
-        last_seen = self.unpack_last_seen_list()
-        unsigned_content = self.unpack_optional(self.unpack_chat)
 
-        header = SignedMessageHeader(uuid, previous_signature)
-        body = SignedMessageBody(message, timestamp, salt, decorated_message, last_seen)
-        return SignedMessage(header, signature, 760, body, unsigned_content)
+        last_seen_count = self.unpack_varint()
+        last_seen = []
+
+        for i in range(last_seen_count):
+            last_seen_id = self.unpack_varint() - 1
+            last_seen_signature = self.unpack_optional(lambda: self.read(256))
+            last_seen.append((last_seen_id, last_seen_signature))
+
+        unsigned_content = self.unpack_optional(self.unpack_chat)
+        filter_type = self.unpack_varint()
+        filter_type_bits = None
+
+        if filter_type == 1: # Partially filtered
+            filter_type_bits = self.unpack_array('q', self.unpack_varint())
+
+        chat_type = self.unpack_varint() - 1
+        sender_name = self.unpack_chat()
+        target_name = self.unpack_optional(self.unpack_chat)
+
+        header = SignedMessageHeader(uuid, index, signature)
+        body = SignedMessageBody(message, timestamp, salt, last_seen)
+        filtering = SignedMessageFiltering(filter_type, filter_type_bits)
+        formatting = SignedMessageFormatting(chat_type, sender_name, target_name)
+
+        return SignedMessage(header, body, filtering, formatting, unsigned_content)
 
     @classmethod
     def pack_game_profile(cls, value):
