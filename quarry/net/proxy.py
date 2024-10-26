@@ -53,7 +53,7 @@ class Upstream(ClientProtocol):
 
     # Upstream is ready once in configuration mode
     def start_configuration(self):
-        self.switch_protocol_mode("configuration")
+        super().start_configuration()
         self.bridge.upstream_ready()
 
     def connection_lost(self, reason=None):
