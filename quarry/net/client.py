@@ -159,6 +159,12 @@ class ClientProtocol(Protocol):
         self.logger.warn("Kicked: %s" % p_data)
         self.close()
 
+    def packet_disconnect(self, buff):
+        p_data = buff.unpack_chat()
+
+        self.logger.warn("Kicked: %s" % p_data)
+        self.close()
+
     def packet_hello(self, buff):
         if self.login_state != LoginState.CONNECTING:
             raise ProtocolError(f"Can't switch to {LoginState.AUTHORIZING} from {self.login_state}")
@@ -194,6 +200,18 @@ class ClientProtocol(Protocol):
         else:
             self.enable_encryption()
 
+    # 1.21.2 +
+    def packet_login_finished(self, buff):
+        if self.login_state == LoginState.JOINING:
+            raise ProtocolError(f"Already logged in")
+
+        p_uuid = buff.unpack_uuid()
+        p_display_name = buff.unpack_string()
+
+        buff.read()  # Properties
+        self.complete_login()
+
+    # <= 1.21.1
     def packet_game_profile(self, buff):
         if self.login_state == LoginState.JOINING:
             raise ProtocolError(f"Already logged in")
@@ -257,8 +275,6 @@ class ClientProtocol(Protocol):
 
         buff.discard()
 
-    packet_disconnect = packet_login_disconnect
-
 
 class SpawningClientProtocol(ClientProtocol):
     spawned = False
@@ -269,14 +285,10 @@ class SpawningClientProtocol(ClientProtocol):
 
         super(SpawningClientProtocol, self).__init__(factory, remote_addr)
 
-    # Send a 'move_player_status_only' packet every tick
-    def update_player_inc(self):
-        self.send_packet("move_player_status_only", self.buff_type.pack('?', True))
-
     # Sent a 'player position and look' packet every 20 ticks
     def update_player_full(self):
         self.send_packet(
-            "player_position",
+            "move_player_pos_rot",
             self.buff_type.pack(
                 'dddff?',
                 self.pos_look[0],
@@ -286,10 +298,20 @@ class SpawningClientProtocol(ClientProtocol):
                 self.pos_look[4],
                 True))
 
-    def packet_player_position(self, buff):
-        p_pos_look = buff.unpack('dddff')
+    def send_end_tick(self):
+        self.send_packet("client_tick_end")
 
-        p_flags = buff.unpack('B')
+    def packet_player_position(self, buff):
+        if self.protocol_version >= 768: # 1.21.2+
+            teleport_id = buff.unpack_varint()
+            p_pos_look = buff.unpack('ddd')
+            p_movement = buff.unpack('ddd')
+            p_pos_look += buff.unpack('ff')
+            p_flags = buff.unpack('i')
+        else:
+            p_pos_look = buff.unpack('dddff')
+            p_flags = buff.unpack('B')
+            teleport_id = buff.unpack_varint()
 
         for i in range(5):
             if p_flags & (1 << i):
@@ -297,7 +319,6 @@ class SpawningClientProtocol(ClientProtocol):
             else:
                 self.pos_look[i] = p_pos_look[i]
 
-        teleport_id = buff.unpack_varint()
 
         # Send Player Position And Look
         self.send_packet("accept_teleportation",
@@ -307,8 +328,11 @@ class SpawningClientProtocol(ClientProtocol):
             self.spawn()
 
     def spawn(self):
-        self.ticker.add_loop(1, self.update_player_inc)
         self.ticker.add_loop(20, self.update_player_full)
+
+        if self.protocol_version >= 768: # 1.21.2+
+            self.ticker.add_loop(1, self.send_end_tick)
+
         self.spawned = True
 
     def packet_keep_alive(self, buff):
