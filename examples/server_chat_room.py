@@ -36,6 +36,7 @@ class ChatRoomProtocol(ServerProtocol):
         is_flat = self.buff_type.pack("?", False)
         is_limited_crafting = self.buff_type.pack("?", False)
         portal_cooldown = self.buff_type.pack_varint(0)
+        sea_level = self.buff_type.pack_varint(0)
 
         dimension_count = self.buff_type.pack_varint(1)
         dimension_name = self.buff_type.pack_string("minecraft:overworld")
@@ -77,6 +78,9 @@ class ChatRoomProtocol(ServerProtocol):
 
         # Portal cooldown
         join_game.append(portal_cooldown)
+
+        if self.protocol_version >= 768: # 1.21.2+ sea level
+            join_game.append(sea_level)
 
         if self.protocol_version >= 766:  # 1.20.5 disable secure chat
             join_game.append(self.buff_type.pack("?", False))
