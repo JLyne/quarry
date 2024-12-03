@@ -46,7 +46,8 @@ pack_formats = {
     765: 41,
     766: 45,
     767: 48,
-    768: 57
+    768: 57,
+    769: 61
 }
 
 configurable_registries = {
@@ -82,6 +83,20 @@ configurable_registries = {
         NamespacedKey.minecraft('painting_variant')
     ],
     768: [
+        NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('chat_type'),
+        NamespacedKey.minecraft('trim_pattern'),
+        NamespacedKey.minecraft('trim_material'),
+        NamespacedKey.minecraft('wolf_variant'),
+        NamespacedKey.minecraft('dimension_type'),
+        NamespacedKey.minecraft('damage_type'),
+        NamespacedKey.minecraft('banner_pattern'),
+        NamespacedKey.minecraft('enchantment'),
+        NamespacedKey.minecraft('jukebox_song'),
+        NamespacedKey.minecraft('painting_variant'),
+        NamespacedKey.minecraft('instrument')
+    ],
+    769: [
         NamespacedKey.minecraft('worldgen/biome'),
         NamespacedKey.minecraft('chat_type'),
         NamespacedKey.minecraft('trim_pattern'),
