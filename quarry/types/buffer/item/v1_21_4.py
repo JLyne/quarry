@@ -34,7 +34,6 @@ class ItemBuffer1_21_4(ItemBuffer1_21_2):
 
     @classmethod
     def pack_custom_model_data(cls, value):
-        print('???')
         floats = value.get('floats', [])
         flags = value.get('flags', [])
         strings = value.get('strings', [])

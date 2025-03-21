@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 class ItemBuffer1_21(ItemBuffer1_20_5):
     component_handlers = list(ItemBuffer1_20_5.component_handlers.items())
-    component_handlers.insert(42, ('jukebox_playable', (lambda cls: cls.buffer.pack_jukebox_playable, lambda self: self.buff.unpack_jukebox_playable)))
+    component_handlers.insert(42, ('jukebox_playable', (lambda cls: cls.pack_jukebox_playable, lambda self: self.unpack_jukebox_playable)))
 
     component_handlers = dict(component_handlers)
     component_types = list(component_handlers.keys())

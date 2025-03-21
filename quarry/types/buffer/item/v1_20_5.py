@@ -1,3 +1,4 @@
+import logging
 from typing import Tuple, Union, List
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ map_post_processing = [
     "scale"
 ]
 
+logger = logging.getLogger()
 
 class ItemBuffer1_20_5:
     buffer: 'Buffer1_20_5' = None
@@ -133,17 +135,35 @@ class ItemBuffer1_20_5:
         data = cls.buffer.pack_varint(values) + \
             cls.buffer.pack_varint(markers)
 
+        done = []
+
         # Structured data with values
         for (data_key, data_value) in value.items():
+            if data_key not in cls.component_types:
+                logger.warning("Ignoring unknown component type: %s", data_key)
+                continue
+
+            if cls.component_handlers[data_key] is None:
+                continue
+
+            done.append(data_key)
             component_handler = cls.component_handlers[data_key][0](cls)
 
             if data_value is not None:
                 data += cls.buffer.pack_varint(cls.component_types.index(data_key)) + component_handler(data_value)
+            else:
+                logger.warning("Missing value for component type: %s", data_key)
 
         # Structured data without values (markers)
         for (data_key, data_value) in value.items():
+            # Ignore already added valued components
+            if data_key in done:
+                continue
+
             if data_value is None:
                 data += cls.buffer.pack_varint(cls.component_types.index(data_key))
+            else:
+                logger.warning("Ignoring value for valueless component type: %s", data_key)
 
         return data
 
@@ -555,6 +575,7 @@ class ItemBuffer1_20_5:
     def pack_tool(cls, value):
         rules = value.get('rules', [])
         default_mining_speed = value.get('default_mining_speed', 1.0)
+        damage_per_block = value.get('damage_per_block', 1)
 
         data = cls.buffer.pack_varint(len(rules))
 
@@ -562,7 +583,7 @@ class ItemBuffer1_20_5:
             data += cls.pack_tool_rule(rule)
 
         data += cls.buffer.pack('f', default_mining_speed)
-        data += cls.buffer.pack_varint('damage_per_block')
+        data += cls.buffer.pack_varint(damage_per_block)
 
     def unpack_tool(self):
         return {
