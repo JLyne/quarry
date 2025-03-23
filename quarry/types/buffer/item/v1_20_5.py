@@ -211,30 +211,34 @@ class ItemBuffer1_20_5:
         return self.buffer.unpack('?')
 
     @classmethod
-    def pack_block_spec(cls, value):
-        tag = value.get('tag', None)
-        blocks = value.get('blocks', None)
-
+    def pack_registry_tag_or_list(cls, value, registry):
         if isinstance(value, str):
-            return cls.buffer.pack_varint(-1) + cls.buffer.pack_string(tag)
+            return cls.buffer.pack_varint(-1) + cls.buffer.pack_string(value)
         elif isinstance(value, list):
-            data = cls.buffer.pack_varint(len(blocks) + 1)
+            data = cls.buffer.pack_varint(len(value) + 1)
 
-            for block in blocks:
-                data += cls.buffer.pack_varint(cls.buffer.registry.encode('minecraft:block', block))
+            for item in value:
+                data += cls.buffer.pack_varint(cls.buffer.registry.encode(registry, item))
 
             return data
         else:
-            raise TypeError("Block spec should be a tag string or a list of block ids")
+            raise TypeError("Value should be a tag or a list of entries in the {} registry".format(registry))
 
-    def unpack_block_spec(self):
+    def unpack_registry_tag_or_list(self, registry):
         length = self.buffer.unpack_varint() - 1
 
         if length == -1:
             return self.buffer.unpack_string()
         else:
             return [
-                self.buffer.registry.decode('minecraft:block', self.buffer.unpack_varint()) for _ in range(length)]
+                self.buffer.registry.decode(registry, self.buffer.unpack_varint()) for _ in range(length)]
+
+    @classmethod
+    def pack_block_spec(cls, value):
+       return cls.pack_registry_tag_or_list(value, 'minecraft:block')
+
+    def unpack_block_spec(self):
+        return self.unpack_registry_tag_or_list('minecraft:block')
 
     @classmethod
     def pack_block_state(cls, value):
