@@ -9,7 +9,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.hashes import SHA256
 from twisted.internet import reactor
-from cached_property import cached_property
+from functools import cached_property
 
 from quarry.data.data_packs import configurable_registries
 from quarry.net.auth import PlayerPublicKey
