@@ -96,7 +96,7 @@ class Message(object):
     def _validate(cls, message):
         type = cls._determine_type(message)
 
-        if cls.type_hints[type] not in message:
+        if type != 'text' and cls.type_hints[type] not in message:
             raise TypeError(f"{type} message does not contain a f{cls.type_hints[type]} property")
 
     @classmethod
@@ -111,7 +111,7 @@ class Message(object):
             if field in message:
                 return type
 
-        raise TypeError("Unknown message type")
+        return 'text'
 
     @classmethod
     def from_string(cls, string):
