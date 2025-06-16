@@ -64,6 +64,21 @@ class ItemBuffer1_21_5(ItemBuffer1_21_4):
             'disable_blocking_for_seconds': self.buffer.unpack('f')
         }
 
+    # Equippable  ---------------------------------------------------------------
+
+    @classmethod
+    def pack_equippable(cls, value):
+        data = super().pack_equippable(value)
+        equip_on_interact = value.get('equip_on_interact', False)
+
+        return data + cls.buffer.pack('?', equip_on_interact)
+
+    def unpack_equippable(self):
+        data = super().unpack_equippable()
+        data['equip_on_interact'] = self.buffer.unpack('?')
+
+        return data
+
     # Blocks Attacks  ---------------------------------------------------------------
 
     @classmethod

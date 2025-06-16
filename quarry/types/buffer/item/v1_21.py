@@ -86,7 +86,7 @@ class ItemBuffer1_21(ItemBuffer1_20_5):
     def pack_jukebox_playable(cls, value):
         show_in_tooltip = value.get('show_in_tooltip', True)
 
-        data = cls.buffer.pack_varint(cls.buffer.registry.encode('minecraft:jukebox_song', value['song'])) + \
+        data = cls.buffer.pack_string(cls.buffer.registry.encode('minecraft:jukebox_song', value['song'])) + \
             cls.buffer.pack('?', show_in_tooltip)
 
         return data
