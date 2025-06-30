@@ -60,4 +60,4 @@ class ItemBuffer1_21_6(ItemBuffer1_21_5):
         if display_type == 'override':
             data['display']['text'] = self.buffer.unpack_chat()
 
-        return value
+        return data

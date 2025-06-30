@@ -49,7 +49,7 @@ pack_formats = {
     768: 57,
     769: 61,
     770: 71,
-    771: 81
+    771: 80,
 }
 
 configurable_registries = {
