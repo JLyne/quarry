@@ -125,8 +125,14 @@ class ItemBuffer1_20_5:
     def pack_structured_data(cls, value):
         values = 0
         markers = 0
+        done = []
 
         for (data_key, data_value) in value.items():
+            if data_key not in cls.component_types:
+                logger.warning("Ignoring unknown component type: %s", data_key)
+                done.append(data_key)
+                continue
+
             if data_value is not None:
                 values += 1
             else:
@@ -135,28 +141,26 @@ class ItemBuffer1_20_5:
         data = cls.buffer.pack_varint(values) + \
             cls.buffer.pack_varint(markers)
 
-        done = []
-
         # Structured data with values
         for (data_key, data_value) in value.items():
-            if data_key not in cls.component_types:
-                logger.warning("Ignoring unknown component type: %s", data_key)
-                continue
-
-            if cls.component_handlers[data_key] is None:
+            # Ignore handled or marker components
+            if data_key in done or cls.component_handlers[data_key] is None:
                 continue
 
             done.append(data_key)
             component_handler = cls.component_handlers[data_key][0](cls)
 
             if data_value is not None:
-                data += cls.buffer.pack_varint(cls.component_types.index(data_key)) + component_handler(data_value)
+                try:
+                    data += cls.buffer.pack_varint(cls.component_types.index(data_key)) + component_handler(data_value)
+                except Exception as e:
+                    logger.exception(f"Failed to pack {data_key} component")
             else:
                 logger.warning("Missing value for component type: %s", data_key)
 
         # Structured data without values (markers)
         for (data_key, data_value) in value.items():
-            # Ignore already added valued components
+            # Ignore already handled components
             if data_key in done:
                 continue
 

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 
 class ItemBuffer1_21_4(ItemBuffer1_21_2):
-    component_handlers = ItemBuffer1_21_2.component_handlers
+    component_handlers = dict(ItemBuffer1_21_2.component_handlers)
     component_handlers['custom_model_data'] = lambda cls: cls.pack_custom_model_data, lambda self: self.unpack_custom_model_data,
 
     def __init__(self, buffer: 'Buffer1_21_2'):

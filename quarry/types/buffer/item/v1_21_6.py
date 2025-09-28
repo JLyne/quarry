@@ -13,10 +13,7 @@ attribute_display_types = [
 
 
 class ItemBuffer1_21_6(ItemBuffer1_21_5):
-    component_handlers = list(ItemBuffer1_21_5.component_handlers.items())
-    component_handlers = dict(component_handlers)
-
-    component_types = list(component_handlers.keys())
+    component_handlers = dict(ItemBuffer1_21_5.component_handlers)
 
     def __init__(self, buffer: 'Buffer1_21_6'):
         super(ItemBuffer1_21_5, self).__init__(buffer)
