@@ -89,7 +89,8 @@ class ChatRoomProtocol(ServerProtocol):
         self.send_packet("login", *join_game)
 
         # Send default spawn position, required to hide Loading Terrain screen
-        self.send_packet("set_default_spawn_position", self.buff_type.pack("iii", 0, 0, 0))
+        self.send_packet("set_default_spawn_position", self.buff_type.pack_position(0, 0, 0)
+                             + self.buff_type.pack('f', 0))
 
         # Send game event so client loads chunks
         self.send_packet("game_event", self.buff_type.pack("Bf", 13, 0.0))
