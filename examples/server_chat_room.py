@@ -89,7 +89,12 @@ class ChatRoomProtocol(ServerProtocol):
         self.send_packet("login", *join_game)
 
         # Send default spawn position, required to hide Loading Terrain screen
-        self.send_packet("set_default_spawn_position", self.buff_type.pack_position(0, 0, 0)
+        if self.protocol_version > 772: # 1.21.9+
+            self.send_packet("set_default_spawn_position",
+                             self.buff_type.pack_global_position("minecraft:overworld", 0, 0, 0) # Now global position
+                             + self.buff_type.pack('ff', 0, 0)) # Added pitch
+        else:
+            self.send_packet("set_default_spawn_position", self.buff_type.pack_position(0, 0, 0)
                              + self.buff_type.pack('f', 0))
 
         # Send game event so client loads chunks

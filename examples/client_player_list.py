@@ -84,6 +84,7 @@ class PlayerListProtocol(ClientProtocol):
 
                 if p_uuid in self.players:
                     self.players[p_uuid]['order'] = p_order
+        buff.discard()
 
     def parse_old_packet(self, buff):
         p_action = buff.unpack_varint()
