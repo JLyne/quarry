@@ -52,7 +52,7 @@ pack_formats = {
     771: 80,
     772: 81,
     773: 88,
-    1073742109: 94.1
+    774: 94.1
 }
 
 configurable_registries = {
@@ -206,7 +206,7 @@ configurable_registries = {
         NamespacedKey.minecraft('wolf_sound_variant'),
         NamespacedKey.minecraft('dialog')
     ],
-    1073742109: [
+    774: [
         NamespacedKey.minecraft('worldgen/biome'),
         NamespacedKey.minecraft('chat_type'),
         NamespacedKey.minecraft('trim_pattern'),
