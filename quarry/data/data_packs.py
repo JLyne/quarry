@@ -15,7 +15,7 @@ def _load() -> Dict[int, DataPack]:
         "data_packs",
         "*.nbt"))
     for nbt_path in glob.glob(nbt_paths):
-        match = re.match('(\d{4})_(.+)\.nbt', os.path.basename(nbt_path))
+        match = re.match('(\d+)_(.+)\.nbt', os.path.basename(nbt_path))
         if not match:
             continue
 
@@ -51,7 +51,8 @@ pack_formats = {
     770: 71,
     771: 80,
     772: 81,
-    773: 88
+    773: 88,
+    1073742109: 94.1
 }
 
 configurable_registries = {
@@ -204,6 +205,31 @@ configurable_registries = {
         NamespacedKey.minecraft('test_instance'),
         NamespacedKey.minecraft('wolf_sound_variant'),
         NamespacedKey.minecraft('dialog')
+    ],
+    1073742109: [
+        NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('chat_type'),
+        NamespacedKey.minecraft('trim_pattern'),
+        NamespacedKey.minecraft('trim_material'),
+        NamespacedKey.minecraft('dimension_type'),
+        NamespacedKey.minecraft('damage_type'),
+        NamespacedKey.minecraft('wolf_variant'),
+        NamespacedKey.minecraft('banner_pattern'),
+        NamespacedKey.minecraft('enchantment'),
+        NamespacedKey.minecraft('jukebox_song'),
+        NamespacedKey.minecraft('painting_variant'),
+        NamespacedKey.minecraft('instrument'),
+        NamespacedKey.minecraft('cat_variant'),
+        NamespacedKey.minecraft('chicken_variant'),
+        NamespacedKey.minecraft('cow_variant'),
+        NamespacedKey.minecraft('frog_variant'),
+        NamespacedKey.minecraft('pig_variant'),
+        NamespacedKey.minecraft('test_environment'),
+        NamespacedKey.minecraft('test_instance'),
+        NamespacedKey.minecraft('wolf_sound_variant'),
+        NamespacedKey.minecraft('dialog'),
+        NamespacedKey.minecraft('timeline'),
+        NamespacedKey.minecraft('zombie_nautilus_variant')
     ]
 }
 

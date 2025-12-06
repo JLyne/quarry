@@ -5,19 +5,6 @@ from quarry.types.buffer.item.v1_21 import ItemBuffer1_21
 if TYPE_CHECKING:
     from quarry.types.buffer import Buffer1_21
 
-item_use_animations = [
-    "none",
-    "eat",
-    "drink",
-    "block",
-    "bow",
-    "spear",
-    "crossbow",
-    "spyglass",
-    "toot_horn",
-    "brush"
-]
-
 consume_effect_types = [
     "apply_effects",
     "remove_effects",
@@ -55,6 +42,19 @@ class ItemBuffer1_21_2(ItemBuffer1_21):
     component_handlers = dict(component_handlers)
     component_types = list(component_handlers.keys())
 
+    item_use_animations = [
+        "none",
+        "eat",
+        "drink",
+        "block",
+        "bow",
+        "spear",
+        "crossbow",
+        "spyglass",
+        "toot_horn",
+        "brush"
+    ]
+
     def __init__(self, buffer: 'Buffer1_21'):
         super(ItemBuffer1_21, self).__init__(buffer)
 
@@ -86,7 +86,7 @@ class ItemBuffer1_21_2(ItemBuffer1_21):
         on_consume_effects = value.get('on_consume_effects', [])
 
         data = cls.buffer.pack('f', consume_seconds) + \
-               cls.buffer.pack_varint(item_use_animations.index(animation)) + \
+               cls.buffer.pack_varint(cls.item_use_animations.index(animation)) + \
                cls.pack_sound_event(value.get('sound', {'sound_id', 'entity.generic.eat'})) + \
                cls.buffer.pack('?', has_consume_particles) + \
                cls.buffer.pack_varint(len(on_consume_effects))
@@ -99,7 +99,7 @@ class ItemBuffer1_21_2(ItemBuffer1_21):
     def unpack_consumable(self):
         return {
             'consume_seconds': self.buffer.unpack('f'),
-            'animation': item_use_animations[self.buffer.unpack_varint()],
+            'animation': self.item_use_animations[self.buffer.unpack_varint()],
             'sound': self.unpack_sound_event(),
             'has_consume_particles': self.buffer.unpack('?'),
             'on_consume_effects': [self.unpack_consume_effect for _ in range(self.buffer.unpack_varint())],
