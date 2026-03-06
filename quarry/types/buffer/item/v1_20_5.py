@@ -387,7 +387,7 @@ class ItemBuffer1_20_5:
     @classmethod
     def pack_attribute_modifier(cls, value):
         return cls.buffer.pack_varint(cls.buffer.registry.encode('minecraft:attribute', value['type'])) + \
-            cls.buffer.pack_uuid(value['uuid']) + \
+            cls.buffer.pack_uuid(value['id']) + \
             cls.buffer.pack_string(value['name']) + \
             cls.buffer.pack('d', value['amount']) + \
             cls.buffer.pack_varint(attribute_operations.index(value['operation'])) + \

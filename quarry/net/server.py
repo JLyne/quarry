@@ -334,7 +334,7 @@ class ServerProtocol(Protocol):
 
         self.profile = buff.unpack_game_profile()
         self.display_name = self.profile['name']
-        self.uuid = self.profile['uuid']
+        self.uuid = self.profile['id']
 
         self.login_state = LoginState.VERIFYING
         self.complete_login()
