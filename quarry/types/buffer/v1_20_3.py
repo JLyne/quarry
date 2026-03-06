@@ -1176,19 +1176,19 @@ class Buffer1_20_3:
 
     @classmethod
     def pack_game_profile(cls, value):
-        name = value.get('name', None)
-        uuid = value.get('uuid', None)
+        name = value.get('name')
+        uuid = value.get('id')
         properties = value.get('properties', [])
 
-        data = cls.pack_optional(cls.pack_string, name) + \
-               cls.pack_optional(cls.pack_uuid, uuid) + \
+        data = cls.pack_uuid(uuid) + \
+               cls.pack_string(name) + \
                cls.pack_varint(len(properties))
 
-        for property in properties:
+        for p in properties:
             signature = value.get('signature', None)
 
-            data += cls.pack_string(property['name']) + \
-                    cls.pack_string(property['value']) + \
+            data += cls.pack_string(p['name']) + \
+                    cls.pack_string(p['value']) + \
                     cls.pack_optional(cls.pack_byte_array, signature)
 
         return data
@@ -1202,7 +1202,62 @@ class Buffer1_20_3:
             }
 
         return {
-            'name': self.unpack_optional(self.unpack_string),
-            'uuid': self.unpack_optional(self.unpack_uuid),
+            'id': self.unpack_uuid(),
+            'name': self.unpack_string(),
             'properties': [unpack_property() for _ in range(self.unpack_varint())]
         }
+
+    @classmethod
+    def pack_resolvable_game_profile(cls, value):
+        complete = "name" in value and "id" in value
+
+        data = cls.pack_varint(1 if complete else 0)
+
+        if complete:
+            data += cls.pack_game_profile(value)
+        else:
+            name = value.get('name', None)
+            uuid = value.get('id', None)
+            properties = value.get('properties', [])
+
+            data += cls.pack_optional(cls.pack_string, name) + \
+               cls.pack_optional(cls.pack_uuid, uuid) + \
+               cls.pack_varint(len(properties))
+
+            for p in properties:
+                signature = value.get('signature', None)
+
+                data += cls.pack_string(p['name']) + \
+                        cls.pack_string(p['value']) + \
+                        cls.pack_optional(cls.pack_byte_array, signature)
+
+        data += cls.pack_optional(cls.pack_string, value.get('body', None)) + \
+                cls.pack_optional(cls.pack_string, value.get('cape', None)) + \
+                cls.pack_optional(cls.pack_string, value.get('elytra', None)) + \
+                cls.pack_optional(cls.pack_varint, value.get('model', None))
+
+        return data
+
+    def unpack_resolvable_game_profile(self):
+        def unpack_property():
+            return {
+                'name': self.unpack_string(),
+                'value': self.unpack_string(),
+                'signature': self.unpack_optional(self.unpack_byte_array)
+            }
+
+        if self.unpack_varint == 1:
+            result = self.unpack_game_profile()
+        else:
+            result = {
+                'id': self.unpack_optional(self.unpack_uuid),
+                'name': self.unpack_optional(self.unpack_string),
+                'properties': [unpack_property() for _ in range(self.unpack_varint())]
+            }
+
+        result['body'] = self.unpack_optional(self.unpack_string)
+        result['cape'] = self.unpack_optional(self.unpack_string)
+        result['elytra'] = self.unpack_optional(self.unpack_string)
+        result['model'] = self.unpack_optional(self.unpack_varint)
+
+        return result

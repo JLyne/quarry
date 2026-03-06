@@ -1,5 +1,6 @@
 import base64
 import hmac
+import json
 import random
 from copy import deepcopy
 from enum import Enum
@@ -38,9 +39,10 @@ class ServerProtocol(Protocol):
     recv_direction = "upstream"
     send_direction = "downstream"
 
+    profile = None
     uuid = None
     display_name = None
-    display_name_confirmed = False
+
     public_key_data: PlayerPublicKey = None
     transferred = False
 
@@ -72,22 +74,14 @@ class ServerProtocol(Protocol):
         if self.protocol_version >= 768:  # 1.21.2 +
             self.send_packet(
                 "login_finished",
-                self.buff_type.pack_uuid(self.uuid) +
-                self.buff_type.pack_string(self.display_name) +
-                self.buff_type.pack_varint(0))
+                self.buff_type.pack_game_profile(self.profile))
         elif 766 <= self.protocol_version <= 767:  # 1.20.5 - 1.21.1
             self.send_packet(
                 "game_profile",
-                self.buff_type.pack_uuid(self.uuid) +
-                self.buff_type.pack_string(self.display_name) +
-                self.buff_type.pack_varint(0) +
+                self.buff_type.pack_game_profile(self.profile) + \
                 self.buff_type.pack('?', True))  # strict error handling?
         else:
-            self.send_packet(
-                "game_profile",
-                self.buff_type.pack_uuid(self.uuid) +
-                self.buff_type.pack_string(self.display_name) +
-                self.buff_type.pack_varint(0))  # Profile properties
+            self.send_packet("game_profile",self.buff_type.pack_game_profile(self.profile))
 
         self.login_state = LoginState.PROTOCOL_SWITCHING
 
@@ -180,6 +174,12 @@ class ServerProtocol(Protocol):
         """Called when auth with mojang succeeded (online mode only)"""
         self.display_name_confirmed = True
         self.uuid = UUID.from_hex(data['id'])
+
+        self.profile = data
+        self.profile['id'] = self.uuid
+        self.display_name = data['name']
+
+        self.logger.info(self.profile)
         self.complete_login()
 
     def player_joined(self):
@@ -242,11 +242,17 @@ class ServerProtocol(Protocol):
                 # Bungeecord ip forwarding, ip/uuid is included in host string separated by \00s
                 split_host = str.split(p_connect_host, "\00")
 
-                if len(split_host) < 3:
+                if len(split_host) < 4:
                     raise ProtocolError("Invalid bungeecord forwarding data")
 
                 self.connect_host = split_host[1]
                 self.uuid = UUID.from_hex(split_host[2])
+
+                self.profile = {
+                    'id': self.uuid,
+                    'name': self.display_name,
+                    'properties': json.loads(split_host[3])
+                }
 
         self.protocol_version = p_protocol_version
         self.buff_type = self.factory.get_buff_type(self.protocol_version)
@@ -287,8 +293,13 @@ class ServerProtocol(Protocol):
                              b'')
         else:
             self.login_state = LoginState.VERIFYING
-            self.display_name_confirmed = True
             self.uuid = UUID.from_offline_player(self.display_name)
+            self.profile = {
+                'id': self.uuid,
+                'name': self.display_name,
+                'properties': []
+            }
+
             self.complete_login()
 
         buff.discard()
@@ -321,13 +332,11 @@ class ServerProtocol(Protocol):
 
         buff.unpack_string()  # Ip
 
-        self.uuid = buff.unpack_uuid()
-        self.display_name = buff.unpack_string()
-
-        buff.discard()  # Don't care about the rest
+        self.profile = buff.unpack_game_profile()
+        self.display_name = self.profile['name']
+        self.uuid = self.profile['uuid']
 
         self.login_state = LoginState.VERIFYING
-        self.display_name_confirmed = True
         self.complete_login()
 
     def packet_key(self, buff):

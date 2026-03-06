@@ -78,7 +78,7 @@ class ItemBuffer1_20_5:
         'lodestone_tracker': (lambda cls: cls.pack_lodestone_tracker, lambda self: self.unpack_lodestone_tracker),
         'firework_explosion': (lambda cls: cls.pack_firework_explosion, lambda self: self.unpack_firework_explosion),
         'fireworks': (lambda cls: cls.pack_fireworks, lambda self: self.unpack_fireworks),
-        'profile': (lambda cls: cls.buffer.pack_game_profile, lambda self: self.buffer.unpack_game_profile),
+        'profile': (lambda cls: cls.buffer.pack_resolvable_game_profile, lambda self: self.buffer.unpack_resolvable_game_profile),
         'note_block_sound': (lambda cls: cls.buffer.pack_string, lambda self: self.buff.unpack_string),
         'banner_patterns': (lambda cls: cls.pack_banner_pattern_layers, lambda self: self.unpack_banner_pattern_layers),
         'base_color': (lambda cls: cls.buffer.pack_varint, lambda self: self.buff.unpack_varint),
