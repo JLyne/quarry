@@ -53,7 +53,7 @@ pack_formats = {
     772: 81,
     773: 88,
     774: 94.1,
-    1073742127: 101.1
+    775: 101.1
 }
 
 configurable_registries = {
@@ -232,7 +232,7 @@ configurable_registries = {
         NamespacedKey.minecraft('timeline'),
         NamespacedKey.minecraft('zombie_nautilus_variant')
     ],
-    1073742127: [
+    775: [
         NamespacedKey.minecraft('worldgen/biome'),
         NamespacedKey.minecraft('chat_type'),
         NamespacedKey.minecraft('trim_pattern'),
