@@ -179,7 +179,6 @@ class ServerProtocol(Protocol):
         self.profile['id'] = self.uuid
         self.display_name = data['name']
 
-        self.logger.info(self.profile)
         self.complete_login()
 
     def player_joined(self):
