@@ -41,6 +41,7 @@ class ServerProtocol(Protocol):
 
     profile = None
     uuid = None
+    session_id = UUID.random()
     display_name = None
 
     public_key_data: PlayerPublicKey = None
@@ -71,7 +72,12 @@ class ServerProtocol(Protocol):
                     self.factory.compression_threshold))
             self.set_compression(self.factory.compression_threshold)
 
-        if self.protocol_version >= 768:  # 1.21.2 +
+        if self.protocol_version >= 1073742142:  # 26.2+
+            self.send_packet(
+                "login_finished",
+                self.buff_type.pack_game_profile(self.profile) + \
+                self.buff_type.pack_uuid(self.session_id)) # Session ID
+        elif self.protocol_version >= 768:  # 1.21.2 +
             self.send_packet(
                 "login_finished",
                 self.buff_type.pack_game_profile(self.profile))

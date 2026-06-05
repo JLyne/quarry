@@ -53,7 +53,8 @@ pack_formats = {
     772: 81,
     773: 88,
     774: 94.1,
-    775: 101.1
+    775: 101.1,
+    1073742142: 107.1
 }
 
 configurable_registries = {
@@ -261,6 +262,37 @@ configurable_registries = {
         NamespacedKey.minecraft('cow_sound_variant'),
         NamespacedKey.minecraft('pig_sound_variant'),
         NamespacedKey.minecraft('world_clock')
+    ],
+    1073742142: [
+        NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('chat_type'),
+        NamespacedKey.minecraft('trim_pattern'),
+        NamespacedKey.minecraft('trim_material'),
+        NamespacedKey.minecraft('dimension_type'),
+        NamespacedKey.minecraft('damage_type'),
+        NamespacedKey.minecraft('wolf_variant'),
+        NamespacedKey.minecraft('banner_pattern'),
+        NamespacedKey.minecraft('enchantment'),
+        NamespacedKey.minecraft('jukebox_song'),
+        NamespacedKey.minecraft('painting_variant'),
+        NamespacedKey.minecraft('instrument'),
+        NamespacedKey.minecraft('cat_variant'),
+        NamespacedKey.minecraft('chicken_variant'),
+        NamespacedKey.minecraft('cow_variant'),
+        NamespacedKey.minecraft('frog_variant'),
+        NamespacedKey.minecraft('pig_variant'),
+        NamespacedKey.minecraft('test_environment'),
+        NamespacedKey.minecraft('test_instance'),
+        NamespacedKey.minecraft('wolf_sound_variant'),
+        NamespacedKey.minecraft('dialog'),
+        NamespacedKey.minecraft('timeline'),
+        NamespacedKey.minecraft('zombie_nautilus_variant'),
+        NamespacedKey.minecraft('cat_sound_variant'),
+        NamespacedKey.minecraft('chicken_sound_variant'),
+        NamespacedKey.minecraft('cow_sound_variant'),
+        NamespacedKey.minecraft('pig_sound_variant'),
+        NamespacedKey.minecraft('world_clock'),
+        NamespacedKey.minecraft('sulfur_cube_archetype')
     ]
 }
 
