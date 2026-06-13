@@ -54,7 +54,7 @@ pack_formats = {
     773: 88,
     774: 94.1,
     775: 101.1,
-    1073742145: 107.1
+    1073742146: 107.1
 }
 
 configurable_registries = {
@@ -263,7 +263,7 @@ configurable_registries = {
         NamespacedKey.minecraft('pig_sound_variant'),
         NamespacedKey.minecraft('world_clock')
     ],
-    1073742145: [
+    1073742146: [
         NamespacedKey.minecraft('worldgen/biome'),
         NamespacedKey.minecraft('chat_type'),
         NamespacedKey.minecraft('trim_pattern'),

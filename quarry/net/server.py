@@ -72,7 +72,7 @@ class ServerProtocol(Protocol):
                     self.factory.compression_threshold))
             self.set_compression(self.factory.compression_threshold)
 
-        if self.protocol_version >= 1073742145:  # 26.2+
+        if self.protocol_version >= 1073742146:  # 26.2+
             self.send_packet(
                 "login_finished",
                 self.buff_type.pack_game_profile(self.profile) + \
