@@ -24,7 +24,7 @@ from quarry.types.uuid import UUID
 
 class LoginState(Enum):
     HELLO = 0  # Login not started
-    KEY = 1  # Awaiting online mode encryption response
+    KEY = 1  # Awaiting encryption response
     AUTHENTICATING = 2  # Authenticating user with mojang
     NEGOTIATING = 3  # Waiting for velocity plugin message
     VERIFYING = 4  # Compression etc
@@ -63,7 +63,45 @@ class ServerProtocol(Protocol):
         self.velocity_message_id = random.randint(0, 2147483647)
 
     # Convenience functions ---------------------------------------------------
+    def authenticate(self, shared_secret):
+        self.login_state = LoginState.AUTHENTICATING
+
+        # make digest
+        digest = crypto.make_digest(
+            self.server_id.encode('ascii'),
+            shared_secret,
+            self.factory.public_key)
+
+        # do auth
+        remote_host = None
+        if self.factory.prevent_proxy_connections:
+            remote_host = self.remote_addr.host
+        deferred = auth.has_joined(
+            self.factory.auth_timeout,
+            digest,
+            self.display_name,
+            remote_host)
+        deferred.addCallbacks(self.auth_ok, self.auth_failed)
+
+    def negotiate(self):
+        if self.factory.velocity_forwarding:
+            self.login_state = LoginState.NEGOTIATING
+            self.send_packet("custom_query",
+                             self.buff_type.pack_varint(self.velocity_message_id),
+                             self.buff_type.pack_string("velocity:player_info"),
+                             b'')
+        else:
+            self.uuid = UUID.from_offline_player(self.display_name)
+            self.profile = {
+                'id': self.uuid,
+                'name': self.display_name,
+                'properties': []
+            }
+
+            self.complete_login()
+
     def complete_login(self):
+        self.login_state = LoginState.VERIFYING
         if self.factory.compression_threshold:
             # Send set compression
             self.send_packet(
@@ -185,7 +223,7 @@ class ServerProtocol(Protocol):
         self.profile['id'] = self.uuid
         self.display_name = data['name']
 
-        self.complete_login()
+        self.negotiate()
 
     def player_joined(self):
         """Called when the player joins the game"""
@@ -270,7 +308,7 @@ class ServerProtocol(Protocol):
 
         self.display_name = buff.unpack_string()
 
-        if self.factory.online_mode:
+        if self.factory.encryption:
             self.login_state = LoginState.KEY
 
             # send encryption request
@@ -282,7 +320,7 @@ class ServerProtocol(Protocol):
                     self.buff_type.pack_string(self.server_id),
                     pack_array(self.factory.public_key),
                     pack_array(self.verify_token),
-                    self.buff_type.pack('?', True))  # Should authenticate
+                    self.buff_type.pack('?', self.factory.online_mode))  # Should authenticate
             else:
                 self.send_packet(
                     "hello",
@@ -290,22 +328,8 @@ class ServerProtocol(Protocol):
                     pack_array(self.factory.public_key),
                     pack_array(self.verify_token))
 
-        elif self.factory.velocity_forwarding:
-            self.login_state = LoginState.NEGOTIATING
-            self.send_packet("custom_query",
-                             self.buff_type.pack_varint(self.velocity_message_id),
-                             self.buff_type.pack_string("velocity:player_info"),
-                             b'')
         else:
-            self.login_state = LoginState.VERIFYING
-            self.uuid = UUID.from_offline_player(self.display_name)
-            self.profile = {
-                'id': self.uuid,
-                'name': self.display_name,
-                'properties': []
-            }
-
-            self.complete_login()
+            self.negotiate()
 
         buff.discard()
 
@@ -341,7 +365,6 @@ class ServerProtocol(Protocol):
         self.display_name = self.profile['name']
         self.uuid = self.profile['id']
 
-        self.login_state = LoginState.VERIFYING
         self.complete_login()
 
     def packet_key(self, buff):
@@ -376,23 +399,10 @@ class ServerProtocol(Protocol):
         self.cipher.enable(shared_secret)
         self.logger.debug("Encryption enabled")
 
-        # make digest
-        digest = crypto.make_digest(
-            self.server_id.encode('ascii'),
-            shared_secret,
-            self.factory.public_key)
-
-        # do auth
-        self.login_state = LoginState.AUTHENTICATING
-        remote_host = None
-        if self.factory.prevent_proxy_connections:
-            remote_host = self.remote_addr.host
-        deferred = auth.has_joined(
-            self.factory.auth_timeout,
-            digest,
-            self.display_name,
-            remote_host)
-        deferred.addCallbacks(self.auth_ok, self.auth_failed)
+        if self.factory.online_mode:
+            self.authenticate(shared_secret)
+        else:
+            self.negotiate()
 
     # Entering configuration mode
     def packet_login_acknowledged(self, buff):
@@ -469,6 +479,7 @@ class ServerFactory(Factory):
     max_players = 20
     icon_path = None
     online_mode = True
+    encryption = True
     enforce_secure_profile = False
     prevent_proxy_connections = True
     accept_transfers = False
