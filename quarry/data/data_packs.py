@@ -54,7 +54,8 @@ pack_formats = {
     773: 88,
     774: 94.1,
     775: 101.1,
-    776: 107.1
+    776: 107.1,
+    777: 121.0
 }
 
 configurable_registries = {
@@ -292,6 +293,40 @@ configurable_registries = {
         NamespacedKey.minecraft('wolf_variant'),
         NamespacedKey.minecraft('world_clock'),
         NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('zombie_nautilus_variant')
+    ],
+    777: [
+        NamespacedKey.minecraft('banner_pattern'),
+        NamespacedKey.minecraft('block_transformer'), # New
+        NamespacedKey.minecraft('cat_sound_variant'),
+        NamespacedKey.minecraft('cat_variant'),
+        NamespacedKey.minecraft('chat_type'),
+        NamespacedKey.minecraft('chicken_sound_variant'),
+        NamespacedKey.minecraft('chicken_variant'),
+        NamespacedKey.minecraft('cow_sound_variant'),
+        NamespacedKey.minecraft('cow_variant'),
+        NamespacedKey.minecraft('damage_type'),
+        NamespacedKey.minecraft('decorated_pot_pattern'), # New
+        NamespacedKey.minecraft('dialog'),
+        NamespacedKey.minecraft('dimension_type'),
+        NamespacedKey.minecraft('enchantment'),
+        NamespacedKey.minecraft('frog_variant'),
+        NamespacedKey.minecraft('instrument'),
+        NamespacedKey.minecraft('jukebox_song'),
+        NamespacedKey.minecraft('painting_variant'),
+        NamespacedKey.minecraft('pig_sound_variant'),
+        NamespacedKey.minecraft('pig_variant'),
+        NamespacedKey.minecraft('sulfur_cube_archetype'),
+        NamespacedKey.minecraft('test_environment'),
+        NamespacedKey.minecraft('test_instance'),
+        NamespacedKey.minecraft('timeline'),
+        NamespacedKey.minecraft('trim_material'),
+        NamespacedKey.minecraft('trim_pattern'),
+        NamespacedKey.minecraft('wolf_sound_variant'),
+        NamespacedKey.minecraft('wolf_variant'),
+        NamespacedKey.minecraft('world_clock'),
+        NamespacedKey.minecraft('worldgen/biome'),
+        NamespacedKey.minecraft('worldgen/block_state_provider'), # New
         NamespacedKey.minecraft('zombie_nautilus_variant')
     ]
 }

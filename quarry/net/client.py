@@ -319,10 +319,16 @@ class SpawningClientProtocol(ClientProtocol):
             else:
                 self.pos_look[i] = p_pos_look[i]
 
+        # Accept teleportation
+        if self.protocol_version >= 777: # 26.3+
+            self.send_packet("accept_teleportation",
+                             self.buff_type.pack_varint(teleport_id),
+                             self.buff_type.pack('dddff', self.pos_look[0], self.pos_look[1], self.pos_look[2],
+                                                 self.pos_look[3], self.pos_look[4]))
+        else:
+            self.send_packet("accept_teleportation",
+                             self.buff_type.pack_varint(teleport_id))
 
-        # Send Player Position And Look
-        self.send_packet("accept_teleportation",
-                         self.buff_type.pack_varint(teleport_id))
 
         if not self.spawned:
             self.spawn()
